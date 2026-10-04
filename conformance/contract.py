@@ -20,6 +20,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONTRACT = ROOT / "openapi/astrocollab.yaml"
+DEFAULT_CATALOG = ROOT / "spec/codes.md"
 METHODS = ("get", "put", "post", "delete", "patch")
 LOOPBACK_URL = r"^(https://|http://(127\.0\.0\.1|localhost|\[::1\])(:[0-9]+)?(/|$))"
 
@@ -53,7 +54,7 @@ def _headers(headers: Mapping[str, str] | None) -> dict[str, str]:
 
 class Contract:
     def __init__(self, path: Path | str = DEFAULT_CONTRACT, allow_http_loopback: bool = False,
-                 schema_dir: Path | str | None = None):
+                 schema_dir: Path | str | None = None, catalog: Path | str | None = DEFAULT_CATALOG):
         """Load the OpenAPI contract. With `schema_dir`, validate named bodies against
         the standalone JSON Schemas there (such as schemas/) instead."""
         self.doc = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
@@ -61,6 +62,7 @@ class Contract:
         if allow_http_loopback:
             _relax_https(self.components)
         self.format_checker = FormatChecker()
+        self.catalog = load_catalog(catalog) if catalog and Path(catalog).exists() else None
         self.registry = None
         self.schema_ids: dict[str, str] = {}
         if schema_dir is not None:
@@ -201,6 +203,38 @@ class Contract:
         issues += [f"body {m}" for m in self.validate(schema, value)]
         return issues
 
+    # Catalog of codes (warnings only: servers MAY add codes)
+
+    def catalog_warnings(self, status: int, body: bytes | None) -> list[str]:
+        """Name problem codes, wait reasons and rejection reasons missing from spec/codes.md."""
+        if self.catalog is None or not body:
+            return []
+        try:
+            value = json.loads(body)
+        except ValueError:
+            return []
+        found: list[tuple[str, str]] = []
+
+        def walk(node: Any) -> None:
+            if isinstance(node, dict):
+                if node.get("action") == "wait":
+                    found.extend(("wait", c) for c in node.get("reason_codes", []))
+                if node.get("state") == "rejected" and "artifact_id" in node:
+                    found.extend(("rejection", c) for c in node.get("reason_codes", []))
+                for child in node.values():
+                    walk(child)
+            elif isinstance(node, list):
+                for child in node:
+                    walk(child)
+
+        if status >= 400 and isinstance(value, dict) and isinstance(value.get("code"), str):
+            found.append(("error", value["code"]))
+        else:
+            walk(value)
+        names = {"error": "error code", "wait": "wait reason", "rejection": "rejection reason"}
+        return [f"{names[kind]} {code} is not in spec/codes.md" for kind, code in found
+                if code not in self.catalog[kind]]
+
     # Responses
 
     def check_response(self, method: str, path: str, status: int, headers: Mapping[str, str] | None,
@@ -263,6 +297,24 @@ class Contract:
             return issues + ["response body is not valid JSON"]
         issues += [f"response {m}" for m in self.validate(media["schema"], value)]
         return issues
+
+
+def load_catalog(path: Path | str = DEFAULT_CATALOG) -> dict[str, set[str]]:
+    """Read spec/codes.md: error codes, check-in wait reasons and file rejection
+    reasons, from the backticked names in each table's first column (the second
+    column when the first holds an HTTP status)."""
+    catalog: dict[str, set[str]] = {"error": set(), "wait": set(), "rejection": set()}
+    section = None
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            heading = line.lower()
+            section = ("error" if "error" in heading else "wait" if "wait" in heading
+                       else "rejection" if "rejection" in heading else None)
+        elif section and line.startswith("| `"):
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            cell = cells[1] if re.fullmatch(r"`\d{3}`", cells[0]) and len(cells) > 1 else cells[0]
+            catalog[section].update(re.findall(r"`([a-z][a-z0-9_]*)`", cell))
+    return catalog
 
 
 def _relax_https(node: Any) -> None:

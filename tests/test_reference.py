@@ -1,7 +1,8 @@
 """Run the reference client against the reference server, then probe its rules.
 
 The server checks every response against openapi/astrocollab.yaml, so a
-contract break shows up as a 500 contract_violation.
+contract break shows up as a 500 internal_error whose detail starts
+"Contract violation".
 """
 import hashlib
 import json
@@ -226,11 +227,11 @@ class ReferenceServerTests(Http, unittest.TestCase):
         data = b"r" * 900
         result = self.submit(ALICE, project_id, self.manifest(project_id, data), data)
         self.assertEqual(result["state"], "accepted")
-        self.api.assess_artifact(result["artifact_id"], "rejected", ["satellite_trail"])
+        self.api.assess_artifact(result["artifact_id"], "rejected", ["quality_limit"])
         sub = next(s for s in self.api.submissions.values()
                    if s["manifest"]["artifacts"][0]["id"] == result["artifact_id"])
         latest = self.call("GET", f"/submissions/{sub['id']}", ALICE)[2]["artifacts"][0]
-        self.assertEqual((latest["state"], latest["reason_codes"]), ("rejected", ["satellite_trail"]))
+        self.assertEqual((latest["state"], latest["reason_codes"]), ("rejected", ["quality_limit"]))
         self.assertNotIn("credited_frames", latest)
 
     def test_stacked_masters(self):
@@ -308,7 +309,7 @@ class ReferenceServerTests(Http, unittest.TestCase):
         self.assertEqual(titles, ["Sample masters"])
         survey = self.httpd.sample_project_ids[SURVEY]
         self.assertProblem(self.post(f"/projects/{survey}/submissions", paired["api_key"],
-                                     self.manifest(survey, b"z")), 404, "not_found")
+                                     self.manifest(survey, b"z")), 403, "membership_inactive")
 
 
 class AssignmentTests(Http, unittest.TestCase):
@@ -439,6 +440,21 @@ class AssignmentTests(Http, unittest.TestCase):
         self.assertEqual((result["action"], result["reason_codes"]), ("wait", ["no_matching_filter"]))
         self.assertNotIn("assignment", result)
 
+    def test_closed_project_with_goals_met_waits(self):
+        project_id, reqs = self.project(SURVEY)
+        target = reqs["targets"][5]  # NGC 7662
+        objective = next(o for o in reqs["objectives"] if o["target_id"] == target["id"])
+        self.api.publish(project_id, {**reqs, "objectives": [{**objective, "goal": {"accepted_frames": 1}}]})
+        self.api.projects[project_id]["state"] = "closed"
+        self.api.credits[(project_id, objective["id"], "test")] = {  # One credited frame, no panel.
+            "artifact_id": "test", "surplus": False, "frames": 1, "seconds": 60, "seconds_each": 60,
+            "captures": [], "panel_id": None}
+        config = client.rig("Small pixels", 600, self.filters(1))
+        config.update(pixel_size_um=1.5, filters=[{"id": str(uuid.uuid4()), "bandpasses": [{
+            "name": "OIII", "center_nm": 500.7, "width_nm": 3.0}]}])
+        result = self.check_in(config)
+        self.assertEqual((result["action"], result["reason_codes"]), ("wait", ["goals_met"]))
+
     def test_sampling_out_of_range_waits(self):
         result = self.check_in(client.rig("135 mm lens", 135, self.filters()))
         self.assertEqual((result["action"], result["reason_codes"]), ("wait", ["sampling_out_of_range"]))
@@ -486,6 +502,11 @@ class AssignmentTests(Http, unittest.TestCase):
         surplus = frame(center)  # The panel already has the full goal.
         self.assertEqual(surplus["state"], "accepted")
         self.assertNotIn("credited_frames", surplus)
+        # Every goal is met, but the project is open: the rig still gets work.
+        more = self.post("/me/checkins", ALICE, {"equipment_id": self.put_rig(ALICE, config),
+                                                  "observed_at": "2026-10-04T06:00:00Z"})[2]
+        self.assertEqual(more["action"], "image")
+        self.assertTrue(any("surplus" in n for n in more["assignment"]["notes"]))
 
 
 if __name__ == "__main__":

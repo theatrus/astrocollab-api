@@ -50,7 +50,8 @@ default 50) and return `next_cursor`, `null` on the last page.
 
 Errors use [`application/problem+json`](https://www.rfc-editor.org/rfc/rfc9457.html)
 with a stable `code`, the HTTP `status`, a short `detail`, a request ID and, for
-invalid input, field `errors`. Clients act on `code`.
+invalid input, field `errors`. Clients act on `code`. [Codes](codes.md) lists
+every error code, check-in `wait` reason and file rejection reason.
 
 | Status | Meaning |
 | --- | --- |
@@ -159,7 +160,7 @@ The server answers with one of three actions:
 | --- | --- |
 | `image` | `assignment` holds new work. Start it at a safe point. |
 | `continue` | Keep working on the current assignment. |
-| `wait` | Nothing suits this rig now. `reason_codes` say why, such as `rig_incomplete`, `no_matching_filter`, `sampling_out_of_range` or `goals_met`. |
+| `wait` | Nothing suits this rig now. `reason_codes` say why; see [codes](codes.md#check-in-wait-reasons). |
 
 Each answer gives `next_checkin_seconds`. The server decides; there is no
 proposal for the client to accept or reject. A repeated check-in creates nothing
@@ -177,9 +178,8 @@ replaces the rig's previous one, so repeating it changes nothing. A rig sends
 The server counts reported frames when it hands out panels, so it does not send
 more rigs to a panel whose data is already on its way, and shows them in
 progress as `reported_frames`. Reported frames earn no credit; only submitted,
-accepted data does. Servers MAY stop counting a report that is not followed by
-submissions, for example after the submission deadline or a period they
-publish.
+accepted data does. How long a report counts without a submission is up to each
+server.
 
 ### How the server assigns work
 
@@ -217,7 +217,10 @@ MUST fit the rig's field, use one of its filters, and meet the objective's
 sampling and exposure rules.
 
 Assignments reserve nothing. Two rigs may get overlapping panels, and useful data
-from both counts.
+from both counts. More data is always welcome: while a project is open, servers
+SHOULD keep assigning useful work rather than answer `wait`, even for a panel
+other rigs already hold or one that has met its goal. Data past a goal is
+surplus, credited to the contributor.
 
 ### Client duties
 

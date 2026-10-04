@@ -1,5 +1,9 @@
 # Reference server and client
 
+This is an example for testing and for implementers to read, not a server to
+run for real projects. The protocol is meant to be built into existing capture
+software, such as N.I.N.A., and into servers that host projects.
+
 A small in-memory server and a walkthrough client for the AstroCollab
 contributor API. Read them to see how the rules in
 [the protocol](../spec/protocol.md) fit together. Do not deploy the server: it
@@ -134,14 +138,20 @@ rules live in [planning.py](planning.py):
    rigs' live assignments and their reported, unsubmitted frames. One panel is
    the usual assignment; the next is added only if the first would finish
    within a 6-hour night (at most 3).
-8. Exposure is the objective's minimum. Suggested frames close the panel's
+8. More data is always good. While a project is open, a rig whose only options
+   have met their goals, or whose panels other rigs already hold, still gets
+   work: the least-deep panel, for one night. Frames past a goal are surplus,
+   credited to the contributor.
+9. Exposure is the objective's minimum. Suggested frames close the panel's
    deficit, assuming 80% pass. Estimates add 20% overhead.
-9. A dual-band filter serves several objectives at once: the panel lists every
-   objective on the same target and processing group that the filter covers,
-   and an accepted frame is credited to each.
-10. When nothing fits, the answer is `wait` with a reason:
-    `no_matching_filter`, `sampling_out_of_range`, `color_state_mismatch`,
-    `target_too_low`, `goals_met`, `project_not_open` or `no_active_projects`.
+10. A dual-band filter serves several objectives at once: the panel lists every
+    objective on the same target and processing group that the filter covers,
+    and an accepted frame is credited to each.
+11. When nothing fits, the answer is `wait` with a reason from
+    [spec/codes.md](../spec/codes.md): `rig_incomplete`, `no_active_projects`,
+    `no_matching_filter`, `sampling_out_of_range`, `color_state_mismatch` or
+    `target_too_low`. `goals_met` means the project has closed after meeting
+    its goals.
 
 Check-ins are safe to repeat. Unchanged work comes back as the same
 assignment; once the rig names it in `assignment_id`, the answer is
@@ -158,8 +168,12 @@ and reports stop counting after the submission deadline.
   upload's expiry. Finalizing returns the submission in `processing`; poll it
   until `complete`. A repeated create with the same ID and body returns 200
   with the submission; a different body returns `409 id_conflict`.
+- **Codes:** errors, `wait` reasons and rejection reasons follow
+  [spec/codes.md](../spec/codes.md). A key limited to other projects, or an
+  inactive membership, gets `403 membership_inactive`.
 - **Automatic assessment:** the server checks the file hash, passbands,
-  exposure range, fresh-solve evidence and the manifest's measurements. When
+  exposure range, the rig's sampling against the processing group,
+  fresh-solve evidence and the manifest's measurements. When
   the frame names a panel and carries a solve, the solved center must cover
   the panel by at least the objective's `minimum_coverage_fraction`
   (`coverage_too_low`).
@@ -198,7 +212,7 @@ project_id = api.create_project(requirements)        # Publish revision 1; state
 api.publish(project_id, new_requirements)              # Publish the next revision.
 api.join("bob", project_id)                            # Active member; consents to current terms.
 code = api.issue_pairing_code("bob", equipment_id=rig)  # As the account pages would.
-api.assess_artifact(artifact_id, "rejected", ["satellite_trail"])
+api.assess_artifact(artifact_id, "rejected", ["quality_limit"])
 api.record_retrieval(artifact_id, "verified", sha256_hex, size_bytes)
 ```
 
@@ -212,7 +226,7 @@ submissions get `409 terms_consent_required`.
 ## What it leaves out
 
 - No image decoding or quality measurement: the server trusts the manifest's
-  measurements and solve.
+  measurements and solve, so it never returns `413 image_too_large`.
 - No fetching: it never opens external URLs and publishes no
   `external_retrieval_hosts`.
 - No web pages, signup or key list. Use `--key`, `--pairing-code`, `--join` or

@@ -50,6 +50,10 @@ The bracket names the row in `spec/conformance.md`. A check fails if the server
 returns the wrong status or code, or if any response breaks the contract. The
 suite exits with status 1 if any check fails.
 
+The suite and the proxy also warn about any problem `code`, check-in wait
+reason or file rejection reason missing from [spec/codes.md](../spec/codes.md).
+Servers may add codes, so these are `WARN` lines, not failures.
+
 ### What the checks cover
 
 - **Credentials.** `/capabilities` is public. The key is an active

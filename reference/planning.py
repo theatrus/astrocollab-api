@@ -149,6 +149,7 @@ def candidates(config: dict, requirements: dict, deficits: dict):
 
     choices is a list of (deficit_seconds, objective, filter), largest first.
     deficits maps objective ID to remaining seconds of accepted integration.
+    Objectives whose goal is met stay in the list, last: more data still helps.
     """
     groups = {g["id"]: g for g in requirements["processing_groups"]}
     targets = {t["id"]: t for t in requirements["targets"]}
@@ -156,9 +157,6 @@ def candidates(config: dict, requirements: dict, deficits: dict):
     latitude = config.get("site", {}).get("latitude_degrees")
     reasons, choices = set(), []
     for objective in requirements["objectives"]:
-        if deficits[objective["id"]] <= 0:
-            reasons.add("goals_met")
-            continue
         matched = [f for f in config["filters"] if serves(f["bandpasses"], objective["bandpasses"])]
         if not matched:
             reasons.add("no_matching_filter")
@@ -183,7 +181,7 @@ def candidates(config: dict, requirements: dict, deficits: dict):
         return choices, []
     # Report the most useful reason: what would the user need to change?
     for code in ("sampling_out_of_range", "color_state_mismatch", "target_too_low",
-                 "no_matching_filter", "goals_met"):
+                 "no_matching_filter"):
         if code in reasons:
             return [], [code]
-    return [], ["goals_met"]
+    return [], ["no_matching_filter"]

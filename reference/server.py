@@ -277,7 +277,8 @@ class Api:
 
     def assess_artifact(self, artifact_id: str, decision: str, reasons: list | None = None) -> dict:
         """Record a maintainer's decision on a validated artifact, replacing the
-        automatic one. Acceptance credits it as automatic acceptance would."""
+        automatic one. Acceptance credits it as automatic acceptance would.
+        Rejection reasons should come from spec/codes.md (default quality_limit)."""
         with self.lock:
             artifact = self.artifacts[artifact_id]
             if artifact["state"] not in ("accepted", "rejected"):
@@ -290,7 +291,7 @@ class Api:
                 self.uncredit(manifest["id"])
                 self.record(sub, artifact, "accepted", [], self.credits_for(sub, manifest))
             else:
-                self.record(sub, artifact, "rejected", reasons or ["maintainer_rejected"], [])
+                self.record(sub, artifact, "rejected", reasons or ["quality_limit"], [])
             return public(artifact)
 
     def record_retrieval(self, artifact_id: str, outcome: str, sha256_hex: str | None = None,
@@ -383,9 +384,10 @@ class Api:
             try:
                 self.check_response(op, status, body)
             except AssertionError as error:
-                status, body = 500, {"type": "about:blank", "title": "Contract violation",
-                                     "status": 500, "code": "contract_violation",
-                                     "detail": str(error)[:2000], "request_id": request_id}
+                status, body = 500, {"type": "about:blank", "title": "Internal error",
+                                     "status": 500, "code": "internal_error",
+                                     "detail": f"Contract violation: {error}"[:2000],
+                                     "request_id": request_id}
         out = {"X-Request-Id": request_id, **extra}
         out["Content-Type"] = "application/problem+json" if status >= 400 else "application/json"
         return status, out, json.dumps(body, ensure_ascii=False).encode()
@@ -454,11 +456,13 @@ class Api:
 
     def member(self, req: Request, project_id: str) -> dict:
         """Require an active membership in a project the key covers."""
+        if project_id not in self.projects:
+            raise Problem(404, "not_found", "No such project.")
         membership = self.members.get((req.cred.account_id, project_id))
-        if membership is None or not self.covers(req.cred, project_id):
-            raise Problem(404, "not_found", "No such resource.")
-        if membership["state"] != "active":
-            raise Problem(403, "membership_inactive", "Your membership in this project is not active.")
+        if membership is None or membership["state"] != "active" or not self.covers(req.cred, project_id):
+            raise Problem(403, "membership_inactive",
+                          "The account is not an active member of this project, or the key "
+                          "is limited to other projects.")
         return membership
 
     def page(self, req: Request, items: list, name: str) -> dict:
@@ -546,6 +550,11 @@ class Api:
             raise Problem(404, "not_found", "No such rig.")
         return history[-1]
 
+    def rig_revision(self, account_id: str, ref: dict) -> dict | None:
+        """The rig description a frame was taken with, or None if unknown."""
+        history = self.equipment.get((account_id, ref["equipment_id"]), [])
+        return history[ref["revision"] - 1]["configuration"] if 1 <= ref["revision"] <= len(history) else None
+
     def save_rig(self, account_id: str, eid: str, config: dict) -> dict:
         if any(key[1] == eid and key[0] != account_id for key in self.equipment):
             raise Problem(409, "id_conflict", "Another account uses this equipment ID.")
@@ -613,7 +622,8 @@ class Api:
             elif best is None or outcome[0] > best[0]:
                 best = outcome
         if best is None:
-            return 200, {"action": "wait", "next_checkin_seconds": 3600, "reason_codes": sorted(set(reasons))}
+            return 200, {"action": "wait", "next_checkin_seconds": 3600,
+                         "reason_codes": sorted(set(reasons)) or ["no_active_projects"]}
         assignment = best[1]
         previous = self.assignments.get(self.latest.get(eid, ""))
         if previous and parse_ts(previous["expires_at"]) > now() and self.same_work(previous, assignment):
@@ -671,11 +681,11 @@ class Api:
 
     def plan(self, project_id: str, eid: str, equipment: dict):
         """Plan one rig for one project. Returns (deficit, assignment) or reason codes."""
-        if self.projects[project_id]["state"] != "open":
-            return ["project_not_open"]
         requirements = self.requirements(project_id)
-        if now() >= parse_ts(requirements["capture_deadline"]):
-            return ["project_closed"]
+        if self.projects[project_id]["state"] != "open" \
+                or now() >= parse_ts(requirements["capture_deadline"]):
+            done = all(self.objective_complete(project_id, o) for o in requirements["objectives"])
+            return ["goals_met"] if done else []
         config = with_defaults(equipment["configuration"])
         deficits = self.deficits(project_id, requirements)
         choices, why = planning.candidates(config, requirements, deficits)
@@ -786,12 +796,21 @@ class Api:
                 break
             chosen.append((cell, frames))
             total += frames
-        if not chosen:  # Other rigs already cover every panel; share the neediest.
-            chosen, total = [(ranked[0][1], night)], night
+        if not chosen:
+            # Every panel has its goal, or other rigs hold its remaining frames.
+            # More data still helps: take the least-deep panel; extra frames are surplus.
+            def depth(cell):
+                frames = self.depth(project_id, objective["id"], cell["id"])[0]
+                return frames + self.planned_by_others(cell["id"], eid) + \
+                    self.reported_frames(cell["id"], eid)
+            least = min(grid["panels"], key=depth)
+            chosen, total = [(least, night)], night
+            notes.append("This panel has its goal or other rigs hold its frames; "
+                         "extra data is surplus, credited to you.")
         if len(chosen) > 1:
             notes.append("Image the panels in order; move on when one is done.")
-        served = [oid for oid in objectives_served(requirements, objective, chosen_filter["bandpasses"],
-                                                    exposure) if deficits[oid] > 0]
+        served = objectives_served(requirements, objective, chosen_filter["bandpasses"], exposure)
+        served = [oid for oid in served if deficits[oid] > 0] or served
         if len(served) > 1:
             notes.append("These frames serve several objectives through this filter's passbands.")
         for cell, _ in chosen:
@@ -1109,6 +1128,12 @@ class Api:
             objective = objectives[oid]
             if not planning.serves(manifest["bandpasses"], objective["bandpasses"]):
                 reasons.append("bandpass_mismatch")
+            config = self.rig_revision(sub["_account_id"], manifest["equipment"])
+            group = next(g for g in reqs["processing_groups"] if g["id"] == manifest["processing_group_id"])
+            limits = group["sampling_arcsec_per_pixel"]
+            if config and all(f in config for f in ("pixel_size_um", "focal_length_mm")) \
+                    and not limits["min"] <= planning.sampling(config) <= limits["max"]:
+                reasons.append("sampling_out_of_range")
             exposure = objective["exposure"]
             if not exposure["min_seconds"] <= manifest["exposure_seconds"] <= exposure["max_seconds"]:
                 reasons.append("exposure_out_of_range")

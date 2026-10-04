@@ -142,6 +142,13 @@ def main() -> None:
         errors = list(Draft202012Validator(schema, registry=registry, format_checker=FORMATS).iter_errors(value))
         assert not errors, f"{entry['file']} fails standalone schema: {errors[0].message}"
 
+    # Every error code the REST reference lists must be defined in spec/codes.md.
+    from contract_docs import ROUTE_CODES
+    catalog = (ROOT / "spec/codes.md").read_text(encoding="utf-8")
+    defined = set(re.findall(r"^\| (?:`\d+` \| )?`([a-z_]+)` \|", catalog, re.M))
+    undefined = {code for codes in ROUTE_CODES.values() for code in codes} - defined
+    assert not undefined, f"Codes missing from spec/codes.md: {sorted(undefined)}"
+
     # Local Markdown link checks; external URLs are references, not fetched by CI.
     for file in ROOT.rglob("*.md"):
         if ".venv" in file.parts or "node_modules" in file.parts:

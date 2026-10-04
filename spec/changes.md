@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- List every error code, check-in `wait` reason and file rejection reason in
+  `spec/codes.md`. Servers keep assigning work after goals are met; more data is
+  welcome. How long a capture report counts is up to each server.
 - Generate standalone JSON Schemas (`schemas/`) and a Markdown REST reference
   (`spec/api.md`) from the contract, so clients need no OpenAPI tools.
 - Check-ins report everything captured but not yet submitted, as per-panel

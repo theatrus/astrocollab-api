@@ -8,7 +8,7 @@ Send `Authorization: Bearer <api key>` where a key is required. Bodies are JSON
 unless stated. Errors use `application/problem+json`; act on `code`. Every type
 links to a standalone [JSON Schema](../schemas/index.json), so you can validate
 payloads without OpenAPI tools. The [protocol](protocol.md) gives the rules
-behind each route.
+behind each route, and [codes](codes.md) lists every error code and reason.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -91,6 +91,8 @@ Request body (`application/json`): [`PairRequest`](../schemas/PairRequest.schema
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
 
+Error codes: [`invalid_pairing_code`](codes.md), [`invalid_request`](codes.md).
+
 Request ([file](../examples/pairClient.request.json)):
 
 ```json
@@ -139,6 +141,8 @@ Join projects on the server's web pages.
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
 
+Error codes: [`invalid_cursor`](codes.md), [`invalid_limit`](codes.md).
+
 Response `200` ([file](../examples/listMyProjects.response.json)):
 
 ```json
@@ -173,6 +177,8 @@ API key: Optional. Public projects can be read without a key.
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
 
+Error codes: [`not_found`](codes.md).
+
 Example: [Response `200`](../examples/getProject.response.json).
 
 <a id="getprogress"></a>
@@ -192,6 +198,8 @@ API key: Optional. Public projects can be read without a key.
 | `200` | [`Progress`](../schemas/Progress.schema.json) (`application/json`) | Success. |
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
+
+Error codes: [`not_found`](codes.md).
 
 Response `200` ([file](../examples/getProgress.response.json)):
 
@@ -246,6 +254,8 @@ Request body (`application/json`): [`EquipmentInput`](../schemas/EquipmentInput.
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
 
+Error codes: [`invalid_request`](codes.md), [`invalid_range`](codes.md).
+
 Example: [Response `200`](../examples/registerEquipment.response.json).
 
 Example: [Request](../examples/registerEquipment.request.json).
@@ -271,6 +281,8 @@ Request body (`application/merge-patch+json`): [`EquipmentInputMergePatchUpdate`
 | `200` | [`Equipment`](../schemas/Equipment.schema.json) (`application/json`) | Success. |
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
+
+Error codes: [`not_found`](codes.md), [`invalid_request`](codes.md), [`invalid_range`](codes.md).
 
 Request ([file](../examples/updateEquipment.request.json)):
 
@@ -301,6 +313,8 @@ API key: Required.
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
 
+Error codes: [`not_found`](codes.md).
+
 Example: [Response `200`](../examples/getEquipment.response.json).
 
 <a id="listequipment"></a>
@@ -322,6 +336,8 @@ API key: Required.
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
 
+Error codes: [`invalid_cursor`](codes.md), [`invalid_limit`](codes.md).
+
 Example: [Response `200`](../examples/listEquipment.response.json).
 
 <a id="checkin"></a>
@@ -341,6 +357,8 @@ Request body (`application/json`): [`Checkin`](../schemas/Checkin.schema.json)
 | `200` | [`CheckinResult`](../schemas/CheckinResult.schema.json) (`application/json`) | Success. |
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
+
+Error codes: [`not_found`](codes.md), [`invalid_reference`](codes.md), [`membership_inactive`](codes.md).
 
 Example: [Response `200`](../examples/checkIn.response.json).
 
@@ -386,6 +404,8 @@ Request body (`application/json`): [`SubmissionCreate`](../schemas/SubmissionCre
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
 
+Error codes: [`membership_inactive`](codes.md), [`id_conflict`](codes.md), [`submission_deadline_passed`](codes.md), [`payload_too_large`](codes.md), [`too_many_artifacts`](codes.md), [`artifact_too_large`](codes.md), [`invalid_request`](codes.md), [`invalid_reference`](codes.md), [`invalid_revision`](codes.md), [`duplicate_id`](codes.md), [`invalid_supersede`](codes.md), [`capture_deadline_passed`](codes.md), [`deliverable_mismatch`](codes.md), [`too_few_subs`](codes.md), [`invalid_stack`](codes.md), [`drizzle_not_allowed`](codes.md), [`external_delivery_not_accepted`](codes.md).
+
 Example: [Response `201`](../examples/createSubmission.response.json).
 
 Example: [Request](../examples/createSubmission.request.json).
@@ -416,6 +436,8 @@ Request body (`application/octet-stream`): `value`
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
 
+Error codes: [`not_found`](codes.md), [`part_conflict`](codes.md), [`upload_expired`](codes.md), [`upload_finalized`](codes.md), [`invalid_part_number`](codes.md), [`part_size_mismatch`](codes.md), [`digest_mismatch`](codes.md).
+
 Response `200` ([file](../examples/putUploadPart.response.json)):
 
 ```json
@@ -443,6 +465,8 @@ API key: Required.
 | `200` | [`UploadSession`](../schemas/UploadSession.schema.json) (`application/json`) | Success. |
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
+
+Error codes: [`not_found`](codes.md).
 
 Response `200` ([file](../examples/getUpload.response.json)):
 
@@ -480,6 +504,8 @@ Returns the submission in `processing`. Read it again until it is `complete`.
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
 
+Error codes: [`not_found`](codes.md), [`upload_incomplete`](codes.md), [`terms_consent_required`](codes.md), [`submission_deadline_passed`](codes.md).
+
 Example: [Response `202`](../examples/finalizeSubmission.response.json).
 
 <a id="getsubmission"></a>
@@ -499,5 +525,7 @@ API key: Required.
 | `200` | [`Submission`](../schemas/Submission.schema.json) (`application/json`) | Success. |
 | `429` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Too many requests. Retry after the stated delay. |
 | `default` | [`Problem`](../schemas/Problem.schema.json) (`application/problem+json`) | Error; see `code`. |
+
+Error codes: [`not_found`](codes.md).
 
 Example: [Response `200`](../examples/getSubmission.response.json).

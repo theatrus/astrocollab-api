@@ -23,6 +23,34 @@ STATUS_TEXT = {
     "429": "Too many requests", "default": "Error",
 }
 INLINE_EXAMPLE_LINES = 30
+# Error codes each route can return, beyond 401, 429 and 5xx. See spec/codes.md.
+ROUTE_CODES = {
+    "pairClient": ["invalid_pairing_code", "invalid_request"],
+    "listMyProjects": ["invalid_cursor", "invalid_limit"],
+    "getProject": ["not_found"],
+    "getProgress": ["not_found"],
+    "registerEquipment": ["invalid_request", "invalid_range"],
+    "updateEquipment": ["not_found", "invalid_request", "invalid_range"],
+    "getEquipment": ["not_found"],
+    "listEquipment": ["invalid_cursor", "invalid_limit"],
+    "checkIn": ["not_found", "invalid_reference", "membership_inactive"],
+    "createSubmission": [
+        "membership_inactive", "id_conflict", "submission_deadline_passed", "payload_too_large",
+        "too_many_artifacts", "artifact_too_large", "invalid_request", "invalid_reference",
+        "invalid_revision", "duplicate_id", "invalid_supersede", "capture_deadline_passed",
+        "deliverable_mismatch", "too_few_subs", "invalid_stack", "drizzle_not_allowed",
+        "external_delivery_not_accepted",
+    ],
+    "putUploadPart": [
+        "not_found", "part_conflict", "upload_expired", "upload_finalized", "invalid_part_number",
+        "part_size_mismatch", "digest_mismatch",
+    ],
+    "getUpload": ["not_found"],
+    "finalizeSubmission": [
+        "not_found", "upload_incomplete", "terms_consent_required", "submission_deadline_passed",
+    ],
+    "getSubmission": ["not_found"],
+}
 # The order a client calls them in.
 OP_ORDER = [
     "getCapabilities", "pairClient", "listMyProjects", "getProject", "getProgress",
@@ -137,7 +165,7 @@ def rest_reference(doc: dict, examples: Path) -> str:
         "unless stated. Errors use `application/problem+json`; act on `code`. Every type",
         "links to a standalone [JSON Schema](../schemas/index.json), so you can validate",
         "payloads without OpenAPI tools. The [protocol](protocol.md) gives the rules",
-        "behind each route.",
+        "behind each route, and [codes](codes.md) lists every error code and reason.",
         "",
         "| Method | Path | Purpose |",
         "| --- | --- | --- |",
@@ -172,6 +200,9 @@ def rest_reference(doc: dict, examples: Path) -> str:
             meaning = " ".join(response.get("description", STATUS_TEXT.get(status, "")).split())
             lines.append(f"| `{status}` | {body_text} | {meaning} |")
         lines.append("")
+        codes = ROUTE_CODES.get(op["operationId"])
+        if codes:
+            lines += ["Error codes: " + ", ".join(f"[`{c}`](codes.md)" for c in codes) + ".", ""]
         for entry in by_op.get(op["operationId"], []):
             title = "Request" if entry["direction"] == "request" else f"Response `{entry['status']}`"
             lines += _example(examples / entry["file"], title)

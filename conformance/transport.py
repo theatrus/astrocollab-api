@@ -50,6 +50,7 @@ class Client:
         self.contract = contract
         self.timeout = timeout
         self.issues: list[str] = []
+        self.warnings: list[str] = []
 
     def request(self, method: str, path: str, key: str | None = None, json_body: Any = None,
                 body: bytes | None = None, headers: dict[str, str] | None = None) -> Response:
@@ -72,4 +73,8 @@ class Client:
         response.contract_issues = self.contract.check_response(method, path, response.status,
                                                                 response.headers, response.body)
         self.issues += [f"{response.describe()}: {issue}" for issue in response.contract_issues]
+        for warning in self.contract.catalog_warnings(response.status, response.body):
+            line = f"{method} {path.split('?')[0]}: {warning}"
+            if line not in self.warnings:
+                self.warnings.append(line)
         return response

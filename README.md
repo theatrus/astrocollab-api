@@ -1,15 +1,21 @@
 # AstroCollab API
 
-An API for many astrophotographers to build one picture together. A project
-sets out the picture: its targets, filters and depth. Each contributor's rig
-asks the server what to image, gets the part of the picture that most needs
-data and suits the rig, and sends back calibrated subs or stacked masters. The
-server checks them and credits accepted data toward the shared goal.
+Shoot one deep target with other astrophotographers. A project, such as a
+600-hour H-alpha mosaic of M31, sets the targets, filters and hours each panel
+needs. At dusk each rig asks the server what to shoot and gets the panel and
+filter that suit its field of view. Calibrated subs, or masters you stack
+yourself, come back to the server, and the good ones go into one stack that no
+single backyard could build.
 
-The API covers what a contributor's client calls: 15 operations. Servers run
-signup, project setup and review with their own tools.
+This repository specifies the API that capture software uses: 15 REST calls to
+pair a rig, ask for work and upload subs. Servers run signup, projects and
+review with their own tools.
 
-**0.1.0-draft.1.** Only a local reference server exists. The draft may change incompatibly.
+**0.1.0-draft.1: a specification, not a product.** AstroCollab is meant to be
+built into capture software people already use, such as N.I.N.A., and into
+servers that run projects. No capture software or public server supports it yet.
+This repository holds the specification, plus an example server and client for
+testing and for implementers to read. The draft may change incompatibly.
 
 [Documentation and API reference](https://theatrus.github.io/astrocollab-api/)
 
@@ -19,6 +25,7 @@ signup, project setup and review with their own tools.
 - [Protocol](spec/protocol.md): the rules servers and clients must follow.
 - [REST reference](spec/api.md): every route, its bodies, responses and examples.
 - [JSON Schemas](schemas): one standalone JSON Schema 2020-12 file per type.
+- [Codes](spec/codes.md): every error code, check-in `wait` reason and rejection reason.
 - [TypeSpec source](typespec) and generated [OpenAPI](openapi/astrocollab.yaml).
 - [Reference server](reference/README.md) and example client.
 - [Conformance tester](conformance/README.md): checks servers and clients.

@@ -113,6 +113,19 @@ class ContractTests(unittest.TestCase):
                 self.assertEqual(bool(standalone.validate(entry["schema"], broken)),
                                  bool(self.contract.validate(entry["schema"], broken)))
 
+    def test_catalog_warnings(self):
+        problem = json.loads(example("id-conflict.json"))
+        self.assertEqual(self.contract.catalog_warnings(409, json.dumps(problem).encode()), [])
+        problem["code"] = "made_up_code"
+        self.assertEqual(self.contract.catalog_warnings(409, json.dumps(problem).encode()),
+                         ["error code made_up_code is not in spec/codes.md"])
+        wait = {"action": "wait", "next_checkin_seconds": 60, "reason_codes": ["rig_incomplete", "odd_reason"]}
+        self.assertEqual(self.contract.catalog_warnings(200, json.dumps(wait).encode()),
+                         ["wait reason odd_reason is not in spec/codes.md"])
+        rejected = {"artifacts": [{"artifact_id": "x", "state": "rejected", "reason_codes": ["quality_limit", "blurry"]}]}
+        self.assertEqual(self.contract.catalog_warnings(200, json.dumps(rejected).encode()),
+                         ["rejection reason blurry is not in spec/codes.md"])
+
     def test_field_of_view(self):
         rig = json.loads(example("registerEquipment.request.json"))
         width, height = server_suite.field_of_view(rig)
@@ -232,6 +245,7 @@ class ReferenceServerTests(unittest.TestCase):
         self.assertGreater(report["requests"], 0)
         self.assertEqual(report["client_faults"], [], json.dumps(report, indent=2))
         self.assertEqual(report["server_faults"], [], json.dumps(report, indent=2))
+        self.assertEqual(report["warnings"], [], json.dumps(report, indent=2))
 
 
 if __name__ == "__main__":

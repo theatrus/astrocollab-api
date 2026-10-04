@@ -31,16 +31,18 @@ class Recorder:
     requests: int = 0
     client: list[dict[str, Any]] = field(default_factory=list)
     server: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[dict[str, Any]] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def add(self, side: str, method: str, path: str, issues: list[str]) -> None:
         with self.lock:
-            target = self.client if side == "client" else self.server
+            target = {"client": self.client, "server": self.server, "warning": self.warnings}[side]
             target += [{"request": f"{method} {path.split('?')[0]}", "issue": i} for i in issues]
 
     def report(self) -> dict[str, Any]:
         with self.lock:
-            return {"requests": self.requests, "client_faults": list(self.client), "server_faults": list(self.server)}
+            return {"requests": self.requests, "client_faults": list(self.client),
+                    "server_faults": list(self.server), "warnings": list(self.warnings)}
 
 
 def make_proxy(listen: tuple[str, int], upstream: str, contract: Contract,
@@ -90,6 +92,7 @@ def make_proxy(listen: tuple[str, int], upstream: str, contract: Contract,
                 conn.close()
             recorder.add("server", self.command, relative,
                          contract.check_response(self.command, relative, status, response_headers, data))
+            recorder.add("warning", self.command, relative, contract.catalog_warnings(status, data))
             if relative.split("?")[0] == "/capabilities" and status == 200:
                 data = self.rewrite_api_root(data)
             self.reply(status, response_headers, data)
@@ -123,7 +126,8 @@ def make_proxy(listen: tuple[str, int], upstream: str, contract: Contract,
 
 def format_report(report: dict[str, Any]) -> str:
     lines = [f"{report['requests']} requests checked."]
-    for title, key in (("Client faults", "client_faults"), ("Server faults", "server_faults")):
+    for title, key in (("Client faults", "client_faults"), ("Server faults", "server_faults"),
+                       ("Warnings (codes not in spec/codes.md)", "warnings")):
         lines.append(f"{title}: {len(report[key])}")
         lines += [f"  {item['request']}: {item['issue']}" for item in report[key]]
     return "\n".join(lines)

@@ -1,16 +1,18 @@
 # How the API works
 
-A project describes one picture that many people build together: its targets,
-filters and how deep each part must go. Contributors work on their own, on their
-own nights, with their own rigs. Each rig asks the server what to image, and the
-server hands out the part of the picture that most needs data and suits that
-rig. Contributors upload what they capture; the server checks it and credits the
-accepted data toward the shared goal.
+A project is one deep image that many astrophotographers shoot together, such
+as a 600-hour H-alpha mosaic of M31. It says which targets to shoot, through
+which filters, and how many hours each panel needs. Everyone shoots on their own
+nights with their own gear. At dusk each rig asks the server what to shoot and
+gets the panel that most needs data and fits its field and filters. The subs
+come back, the server checks them, and the good ones go into the stack.
 
-The server never controls equipment and never reserves a target. Two people can
-image the same field at once; the server credits useful data from both.
+The server never moves your mount and never reserves a target. Two people can
+shoot the same panel on the same night; good data from both counts.
 
-This page follows one contributor from first contact to credited data. Each step
+This is a draft specification for capture software, such as N.I.N.A., to build
+in. No software supports it yet. This page follows one rig from pairing to
+counted subs, and is written for people adding the API to their software. Each step
 shows the request and the important part of the response. Full payloads are in
 [`examples/`](../examples), and the [reference server](../reference/README.md)
 runs every step on your machine, with sample projects.
@@ -285,7 +287,7 @@ for uploaded files. [Example manifest](../examples/external-submission.json).
 | Lists | Pass `next_cursor` back as `cursor` until it is `null`. |
 
 Errors use [`application/problem+json`](https://www.rfc-editor.org/rfc/rfc9457.html).
-Act on `code`, not on the wording of `detail`:
+Act on `code`, not on the wording of `detail`. [Codes](codes.md) lists them all:
 
 ```json
 {

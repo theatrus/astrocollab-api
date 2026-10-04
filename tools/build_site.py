@@ -15,6 +15,7 @@ DEST = ROOT / "_site"
 GUIDES = {
     "how-it-works": "spec/overview.md",
     "rest": "spec/api.md",
+    "codes": "spec/codes.md",
     "authentication": "spec/authentication.md",
     "walkthrough": "spec/walkthrough.md",
     "protocol": "spec/protocol.md",

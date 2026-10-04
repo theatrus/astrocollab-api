@@ -875,8 +875,11 @@ def main(argv: list[str] | None = None) -> int:
     for result in results:
         line = f"{result.outcome} {result.name} [{result.row}]"
         print(line + (f": {result.message}" if result.message else ""))
+    for warning in suite.client.warnings:
+        print(f"WARN {warning}")
     counts = {o: sum(r.outcome == o for r in results) for o in ("PASS", "FAIL", "SKIP")}
-    print(f"\n{counts['PASS']} passed, {counts['FAIL']} failed, {counts['SKIP']} skipped.")
+    print(f"\n{counts['PASS']} passed, {counts['FAIL']} failed, {counts['SKIP']} skipped, "
+          f"{len(suite.client.warnings)} warnings.")
     return 1 if counts["FAIL"] else 0
 
 
