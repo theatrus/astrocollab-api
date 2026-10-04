@@ -13,11 +13,9 @@ Participants register equipment, offer time and submit calibrated exposures.
 The local acquisition system controls equipment, scheduling and safety.
 Servers MUST NOT issue equipment commands or reserve targets through this API.
 
-Clients start with an HTTPS API root and call public `GET /capabilities`. The response
-provides the server UUID, API root, account UI, OAuth metadata, account resource
-URI, supported versions, features and limits. Clients verify TLS and the OAuth
-issuer before authorization. An issuer change requires user review. All routes
-are relative to the API root, which need not use `/v1`.
+Clients start with an HTTPS API root and call public `GET /capabilities`. The
+response gives the server UUID, API root, account pages, supported versions,
+features and limits. Clients verify TLS. All routes are relative to the API root, which need not use `/v1`.
 
 Servers support projects, enrollment, equipment and capacity offers, intent,
 sync and authenticated uploads. Recommendations are optional. An unsupported
@@ -57,45 +55,77 @@ Incompatible changes require a new API version.
 Servers MUST check ID uniqueness, foreign keys, time ordering and physical
 feasibility where JSON Schema cannot enforce them.
 
-## 3. Account authorization and project tokens
+## 3. API keys and scopes
 
-Servers MUST support OAuth authorization code with PKCE S256. Desktop clients
-use an external browser. Servers SHOULD also support device authorization for
-headless clients. Public clients must not embed a secret. Servers document client
-registration; dynamic registration is optional.
+Private routes need `Authorization: Bearer <api key>`. This version defines no
+other credential. The [authentication guide](authentication.md) shows the client
+and server steps.
 
-Issuer metadata defines the OAuth endpoints. The OAuth `resource` parameter
-names the account resource from `/capabilities`. Servers validate token audiences.
-Public clients require refresh-token rotation with reuse detection or equivalent
-sender constraints.
+### Pairing
 
-Account tokens permit discovery, membership management, selected-project sync
-and project creation. Uploads require a participation token. To issue one, the
-client calls `POST /participations/{id}/tokens` with its account token. The server
-checks active membership and cannot grant another client identity or permissions
-beyond the account's authorization. This endpoint delegates access; it is not
-an OAuth grant type.
+Each client installation gets its own key by pairing:
 
-Each participation token identifies the server audience, account, client,
-participation, project and scopes. It expires within 900 seconds and has no
-refresh token. Clients request a replacement through the same endpoint.
-Servers return the secret only at issuance, with its expiry and nonsecret token
-ID. Listing and revocation use that ID. Applications use separate tokens. Servers MAY sign tokens;
-clients MUST treat them as opaque. Servers MUST check current membership and
-revocation on every protected request.
+1. On the account pages (`account_url`), the user issues a pairing code. The
+   user picks the key's scopes, and may limit it to listed projects or set an
+   expiry.
+2. The user enters the code in the client.
+3. The client calls `POST /pair` with the code, a persistent `installation_id`
+   and a `client_name`. It sends no `Authorization` header and no
+   `Idempotency-Key`.
+4. The server returns the new API key once, with `Cache-Control: no-store`.
+
+A code works once and expires within one hour. The server consumes the code and
+creates the key in one transaction. If the account already has a key for the
+same `installation_id`, pairing revokes that key. An unknown, used or expired
+code returns `401 invalid_pairing_code`; repeated failures return `429`. Clients
+MUST NOT retry pairing automatically. If the response is lost, the user issues a
+new code and revokes the orphan key.
+
+Servers MAY also let users create a key on the account pages and copy it into a
+client. Every server MUST support pairing.
+
+### Keys
+
+Servers store only hashes of codes and keys. Secrets carry at least 128 bits of
+randomness. The account pages list each key with its client name, installation,
+scopes and last use, and let the user revoke it. Clients treat keys as opaque
+and store them in a credential store.
+
+A key acts for its account:
+
+- On an account route, it carries the scopes the user gave it.
+- On a project route, the server finds the account's participation in that
+  project. The request needs an active participation, a key that covers the
+  project, and scopes that both the key and the participant's role allow.
+
+Servers check the key, membership and revocation on every request. Unknown,
+expired and revoked keys return `401`. Each key counts as one client: its ID is
+the client ID for idempotency keys, status writers and sync cursors. Clients
+SHOULD check a new key with `GET /me/participations`.
+
+### Scopes and contexts
 
 | Context | Scopes |
 | --- | --- |
 | Account | `account:read`, `participation:manage`, `project:create` |
-| Participant project token | `project:read`, `offer:write`, `intent:write`, `status:write`, `submission:write`, `submission:read-own` |
-| Maintainer project token | Participant scopes plus `project:manage`, `participation:review`, `assessment:write`, `submission:read-all` |
+| Participant | `project:read`, `offer:write`, `intent:write`, `status:write`, `submission:write`, `submission:read-own` |
+| Maintainer | Participant scopes plus `project:manage`, `participation:review`, `assessment:write`, `submission:read-all` |
 
-OpenAPI's `x-token-context` and `x-required-scopes` define authorization for each
-operation. `x-scope-rules`, when present, replaces the default scopes by token
-context or job kind: inner lists use AND; alternative lists use OR. Servers also
-check resource ownership. Assessment-job reads require submission-read permission.
-`submission:read-all` permits metadata review, not file downloads. Maintainers
-cannot issue tokens for another account.
+Each operation's `x-token-context` says what the key acts for:
+
+| `x-token-context` | Meaning |
+| --- | --- |
+| `public` | No key. |
+| `account` | The key's account. |
+| `project` | The account's participation in the route's project. |
+| `account_or_project` | Either; `x-scope-rules` gives the scopes for each. |
+| `public_or_account`, `public_or_project` | No key, or as above. An invalid key still returns `401`. |
+
+`x-required-scopes` lists the default scopes. `x-scope-rules`, when present,
+replaces them by context or job kind: inner lists use AND; alternative lists use
+OR. Servers also check resource ownership. Assessment-job reads require
+submission-read permission. `submission:read-all` permits metadata review, not
+file downloads.
 
 Equipment, capacity, planning policy, intent and check-ins are private to their
 participation. Maintainers need explicit review scopes to read memberships or
@@ -103,21 +133,18 @@ submissions. Public projects may expose summaries, requirements and aggregate
 progress. Members see another participant's activity only if that participant
 shares it. The server may use private offers to plan without disclosing them.
 
-Clients store tokens in credential stores and send them in authorization headers.
-Never put tokens in URLs, manifests, logs or status. Use HTTPS. Clients MUST NOT
-forward bearer tokens across origins. Servers check origins and protect their
-cookie-based UI against CSRF; API requests use bearer tokens.
+Clients store keys in a credential store and send them only in the
+`Authorization` header. Never put them in URLs, manifests, logs or status. Use
+HTTPS. Clients MUST NOT forward keys across origins. Servers check origins and
+protect their cookie-based UI against CSRF.
 
-References: [OAuth security](https://www.rfc-editor.org/rfc/rfc9700.html),
-[native clients](https://www.rfc-editor.org/rfc/rfc8252.html),
-[device authorization](https://www.rfc-editor.org/rfc/rfc8628.html),
-[resource indicators](https://www.rfc-editor.org/rfc/rfc8707.html).
+A later version may add OAuth sign-in. It will not change how API keys work.
 
 ## 4. Projects and published requirements
 
 Project creation atomically creates the initial draft and an active owner
 participation. The request supplies complete requirements and accepts their
-terms. The owner can then obtain a project token.
+terms. The owner's key can then use maintainer routes.
 
 `PUT` replaces the draft using its ETag in `If-Match`. Publication checks that
 same ETag and creates the next immutable revision in one transaction. Only
@@ -173,7 +200,7 @@ membership to `requested`. Check the participation ETag on each transition.
 The last active owner cannot leave or lose ownership. This draft does not define
 role transfer.
 
-Inactive memberships cannot issue tokens or mutate project resources. Account
+Inactive memberships cannot use project routes or change project resources. Account
 reads still return the user's membership state. When a client learns that its
 membership is inactive, it stops new collaboration work at a safe boundary.
 Offline clients limit cached-plan use to the validity period the user approved.
@@ -280,7 +307,7 @@ Use strong ETags. Updates require one `If-Match`; return `428` if missing and
 resource with `If-Match` or an existing one with `If-None-Match: *`. Publication
 checks the draft ETag.
 
-POST mutations require a UUID `Idempotency-Key`. Retain results for the advertised
+POST mutations, except `POST /pair`, require a UUID `Idempotency-Key`. Retain results for the advertised
 period, at least 24 hours. Scope keys by server, account, client, method and path.
 Compare canonical JSON hashes (RFC 8785) and semantic preconditions. Authenticate
 and check current permission first. Then replay an identical request's original
@@ -309,13 +336,14 @@ polling delay. Completed jobs retain their result; failed jobs retain a problem.
 
 Servers limit JSON size, object count, part size, decoded pixels, storage and
 compute. Check actual input, not just declared sizes. Reject client paths,
-executable metadata and requests to fetch arbitrary URLs. Server links use HTTPS;
+executable metadata and requests to fetch arbitrary URLs. External delivery
+links are not fetch requests: servers fetch them only from listed hosts. Server links use HTTPS;
 clients never forward secrets across origins. Keep raw files locally and remove
 private metadata from exported copies according to user consent.
 
 ## 8. Consistent sync
 
-`POST /sync/snapshots` uses account authorization and explicit project IDs.
+`POST /sync/snapshots` takes an account key and explicit project IDs.
 The server checks membership and captures a consistent view with a change
 sequence. It returns the snapshot ID and first page. Include project summaries,
 published revisions, the caller's participation, progress and own assessments.
@@ -383,12 +411,42 @@ submission. Different content conflicts regardless of idempotency-key retention.
 At creation, renewal and finalization, check membership, current terms consent,
 revision deadlines and quota. Revocation also stops part writes. This draft uses
 no presigned storage URLs. Servers may finish previously finalized assessments
-under recorded consent; revoked tokens cannot read private results.
+under recorded consent; revoked keys cannot read private results.
 
 Artifacts progress through `uploading -> received -> validating -> accepted|rejected`.
+Externally delivered artifacts start at `awaiting_retrieval` instead (see below).
 Only acceptance of a replacement changes an accepted artifact to `superseded`.
 Submissions use `uploading`, `processing` or `complete` and report each artifact's
 result, including partial failures.
+
+### External delivery
+
+A project may accept files that contributors share outside the API, such as in a
+Google Drive folder. Its requirements then include `external_delivery`, which
+lists the accepted providers and tells contributors how to share. Without it,
+servers reject external artifacts with `422 external_delivery_not_accepted`.
+
+To register a shared file, the manifest artifact sets `delivery: external` and
+gives an `external` location: provider, HTTPS link, optional file ID and share
+time. It still carries the file's hash, size and full calibration history. The
+server creates no upload session for it. The artifact starts at
+`awaiting_retrieval`, and finalization treats it as complete.
+
+After finalization, someone must fetch the file and check it against the manifest:
+
+- A maintainer downloads it and calls
+  `POST /submissions/{id}/artifacts/{artifact_id}/retrieval` with the outcome,
+  the hash and size of the bytes, and the time. `verified` requires a match and
+  moves the artifact to `validating`. `unavailable` and `digest_mismatch` reject
+  the artifact.
+- A server MAY fetch files itself, but only over HTTPS from the hosts it lists
+  in `external_retrieval_hosts`. It never sends its own credentials to those
+  hosts and applies the same size and decoding limits as for uploads.
+
+Assessment and credit then follow the same rules as for uploaded files. Links may
+grant access to the file: show them only to the submitter and to keys with
+`submission:read-all`, and never in public activity or progress. To replace a
+rejected file, submit a new artifact ID with the same capture identity.
 
 Servers append automated or authorized human assessments with an ID, policy
 revision, evidence, decision, reasons and per-objective credit. Manual writes

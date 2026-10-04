@@ -81,11 +81,12 @@ def main() -> None:
             assert "x-required-scopes" in operation
             parameters = [
                 DOC["components"]["parameters"][p["$ref"].split("/")[-1]]
-                if "$ref" in p else p for p in operation["parameters"]
+                if "$ref" in p else p for p in operation.get("parameters", [])
             ]
             declared = {p["name"] for p in parameters if p["in"] == "path"}
             assert declared == set(re.findall(r"{([^}]+)}", path)), oid
-            if method == "post":
+            # Pairing codes are single use; a replayed pairing response would leak a key.
+            if method == "post" and oid != "pairClient":
                 assert any(p["name"] == "Idempotency-Key" and p["required"] for p in parameters), oid
             payloads = []
             if "requestBody" in operation:
@@ -128,7 +129,7 @@ def main() -> None:
 
     # Local Markdown link checks; external URLs are references, not fetched by CI.
     for file in ROOT.rglob("*.md"):
-        if ".venv" in file.parts:
+        if ".venv" in file.parts or "node_modules" in file.parts:
             continue
         for link in re.findall(r"\]\(([^)]+)\)", file.read_text(encoding="utf-8")):
             target = link.split("#")[0]

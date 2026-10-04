@@ -13,8 +13,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / "_site"
 GUIDES = {
+    "how-it-works": "spec/overview.md",
+    "authentication": "spec/authentication.md",
     "walkthrough": "spec/walkthrough.md",
     "protocol": "spec/protocol.md",
+    "reference-server": "reference/README.md",
+    "conformance-tester": "conformance/README.md",
     "conformance": "spec/conformance.md",
     "integration": "integrations/psf-guard.md",
     "changes": "spec/changes.md",

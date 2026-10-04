@@ -5,7 +5,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 let contract;
 let operations = [];
 let toastTimer;
-const groupNames = {capabilities:'Discovery', projects:'Projects & requirements', me:'Your account', participations:'Participation & planning', sync:'Snapshots', changes:'Change feed', submissions:'Submissions & assessment', uploads:'Resumable uploads', jobs:'Background jobs'};
+const groupNames = {capabilities:'Discovery', pairing:'Pairing', projects:'Projects & requirements', me:'Your account', participations:'Participation & planning', sync:'Snapshots', changes:'Change feed', submissions:'Submissions & assessment', uploads:'Resumable uploads', jobs:'Background jobs'};
 
 function resolve(value) {
   if (!value?.$ref) return value;
@@ -64,9 +64,9 @@ function curlExample(op) {
   const query = parameters.filter(p => p.in === 'query' && p.required).map(p => `${p.name}=${p.schema.type === 'integer' ? '1' : 'EXAMPLE_CURSOR'}`);
   if (query.length) url += '?' + query.join('&');
   const lines = [`curl --request ${op.method.toUpperCase()} '${url}'`];
-  if (op['x-token-context'] !== 'public') lines.push(`  --header 'Authorization: Bearer YOUR_${op['x-token-context'] === 'account' ? 'ACCOUNT' : 'PARTICIPATION'}_TOKEN'`);
+  if (op['x-token-context'] !== 'public') lines.push(`  --header 'Authorization: Bearer YOUR_API_KEY'`);
   for (const p of parameters.filter(p => p.in === 'header' && p.required)) {
-    let value = p.example || (p.name === 'Idempotency-Key' ? '00000000-0000-4000-8000-000000000090' : p.name === 'X-Part-SHA256' ? 'SHA256_OF_PART_BYTES' : p.name === 'Content-Length' ? 'ACTUAL_PART_BYTE_COUNT' : 'VALUE');
+    let value = p.example || (p.name === 'Idempotency-Key' ? '00000000-0000-4000-8000-000000000090' : p.name === 'X-Part-SHA256' ? 'SHA256_OF_PART_BYTES' : p.name === 'Content-Length' ? 'ACTUAL_PART_BYTE_COUNT' : p.name === 'If-Match' ? '"ETAG_FROM_LAST_READ"' : 'VALUE');
     lines.push(`  --header '${p.name}: ${value}'`);
   }
   if (parameters.some(p => p.name === 'If-None-Match' && p.schema.const === '*')) lines.push(`  --header 'If-None-Match: *'`);
@@ -97,7 +97,7 @@ function renderSidebar() {
 function renderReferenceHome() {
   $('#endpoint-content').innerHTML = `<p class="eyebrow">ASTROCOLLAB API / ${escapeHtml(contract.info.version)}</p><h1>API reference</h1><p class="reference-intro">${operations.length} operations. Schemas and examples come from the OpenAPI specification.</p><div class="notice">Draft specification. <code>collab.example</code> is a placeholder. This page does not send API requests.</div><div class="operation-cards">${[
     ['getCapabilities','Service discovery','Find the API root, service capabilities, formats and limits.'],
-    ['issueParticipationToken','Participation tokens','Issue a short-lived token scoped to one client and project.'],
+    ['joinProject','Join a project','Accept the terms and enroll with your API key.'],
     ['checkIn','Automatic framing','Request updated framing using equipment and project progress.'],
     ['createSubmission','Submit calibrated data','Send a manifest, resume verified parts, and receive assessments.'],
     ['createSnapshot','Project sync','Read a snapshot, then apply ordered changes.'],
@@ -108,7 +108,7 @@ function renderOperation(op) {
   const parameters = (op.parameters || []).map(resolve);
   const context = op['x-token-context'].replaceAll('_', ' ');
   const scopes = op['x-required-scopes'];
-  let html = `<p class="eyebrow">${escapeHtml(groupNames[op.tags[0]] || op.tags[0])} / ${escapeHtml(op.operationId)}</p><h1>${escapeHtml(op.summary)}</h1><div class="endpoint-path">${badge(op.method)}<code>${escapeHtml(op.path)}</code></div>${op.description ? `<p class="endpoint-description">${escapeHtml(op.description)}</p>` : ''}<div class="auth-box"><b>Authorization</b> · ${escapeHtml(context)}<p>${scopes.length ? scopes.map(scope => `<span class="scope">${escapeHtml(scope)}</span>`).join('') : 'No default scope required.'}</p>${op['x-scope-rules'] ? `<p>Conditional scope alternatives apply. Each inner list is AND; alternative lists are OR.</p>${codeBlock(op['x-scope-rules'],'SCOPE RULES')}` : ''}<p>The server also checks membership, project and resource ownership. <a class="text-link" href="#guide/protocol/3-account-authorization-and-project-tokens">Authorization rules ↗</a></p></div>`;
+  let html = `<p class="eyebrow">${escapeHtml(groupNames[op.tags[0]] || op.tags[0])} / ${escapeHtml(op.operationId)}</p><h1>${escapeHtml(op.summary)}</h1><div class="endpoint-path">${badge(op.method)}<code>${escapeHtml(op.path)}</code></div>${op.description ? `<p class="endpoint-description">${escapeHtml(op.description)}</p>` : ''}<div class="auth-box"><b>Authorization</b> · ${escapeHtml(context)}<p>${scopes.length ? scopes.map(scope => `<span class="scope">${escapeHtml(scope)}</span>`).join('') : 'No default scope required.'}</p>${op['x-scope-rules'] ? `<p>Conditional scope alternatives apply. Each inner list is AND; alternative lists are OR.</p>${codeBlock(op['x-scope-rules'],'SCOPE RULES')}` : ''}<p>The server also checks membership, project and resource ownership. <a class="text-link" href="#guide/authentication">Authentication guide ↗</a></p></div>`;
   if (parameters.length) html += `<section class="reference-section"><h2>Parameters</h2><div class="table-scroll"><table class="parameter-table"><thead><tr><th>NAME / LOCATION</th><th>TYPE / REQUIREMENT</th><th>DETAILS</th></tr></thead><tbody>${parameters.map(p => `<tr><td><code>${escapeHtml(p.name)}</code><small>${escapeHtml(p.in)}</small></td><td>${escapeHtml(typeName(p.schema))}<br><span class="${p.required ? 'required' : 'optional'}">${p.required ? 'required' : 'optional'}</span></td><td>${escapeHtml(p.description || '')}${constraints(p.schema)}</td></tr>`).join('')}</tbody></table></div></section>`;
   const request = op.requestBody;
   if (request) {
@@ -140,7 +140,7 @@ function renderOperation(op) {
 }
 function renderGuide(name, anchor) {
   const template = document.getElementById(`guide-${name}`);
-  if (!template) { $('#guide-content').innerHTML = '<h1>Guide not found</h1><p><a href="#guide/walkthrough">Read the walkthrough</a></p>'; $('#guide-toc').innerHTML = ''; return; }
+  if (!template) { $('#guide-content').innerHTML = '<h1>Guide not found</h1><p><a href="#guide/how-it-works">Read how the API works</a></p>'; $('#guide-toc').innerHTML = ''; return; }
   $('#guide-content').replaceChildren(template.content.cloneNode(true));
   for (const table of $('#guide-content').querySelectorAll('table')) {
     const wrapper = document.createElement('div'); wrapper.className = 'table-scroll'; table.replaceWith(wrapper); wrapper.append(table);
@@ -157,7 +157,7 @@ function route() {
   document.querySelectorAll('.view').forEach(el => { el.hidden = el.id !== `${view}-view`; });
   document.querySelectorAll('[data-nav]').forEach(a => a.setAttribute('aria-current', a.dataset.nav === view ? 'page' : 'false'));
   document.title = 'AstroCollab — Collaborative astrophotography API';
-  if (view === 'guide') renderGuide(item || 'walkthrough',anchor);
+  if (view === 'guide') renderGuide(item || 'how-it-works',anchor);
   if (view === 'reference') {
     if (!contract) return;
     renderSidebar();

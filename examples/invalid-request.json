@@ -1,0 +1,14 @@
+{
+  "type": "https://collab.example/problems/invalid-request",
+  "title": "Invalid request",
+  "status": 422,
+  "code": "invalid_request",
+  "detail": "The request body does not match the schema.",
+  "request_id": "00000000-0000-4000-8000-000000000090",
+  "errors": [
+    {
+      "pointer": "/artifacts/0/exposure_seconds",
+      "code": "exclusive_minimum"
+    }
+  ]
+}

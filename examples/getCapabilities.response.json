@@ -9,9 +9,6 @@
     "recommendations"
   ],
   "account_url": "https://collab.example/account",
-  "oauth_issuer": "https://auth.collab.example",
-  "oauth_metadata_url": "https://auth.collab.example/.well-known/oauth-authorization-server",
-  "account_resource": "https://collab.example/v1/account",
   "artifact_formats": [
     "fits",
     "xisf"

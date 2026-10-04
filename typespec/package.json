@@ -1,0 +1,15 @@
+{
+  "name": "astrocollab-api-typespec",
+  "private": true,
+  "type": "module",
+  "description": "TypeSpec source for the AstroCollab OpenAPI contract.",
+  "scripts": {
+    "build": "tsp compile ."
+  },
+  "devDependencies": {
+    "@typespec/compiler": "1.16.0",
+    "@typespec/http": "1.16.0",
+    "@typespec/openapi": "1.16.0",
+    "@typespec/openapi3": "1.16.0"
+  }
+}

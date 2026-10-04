@@ -1,0 +1,8 @@
+{
+  "type": "https://collab.example/problems/idempotency-conflict",
+  "title": "Idempotency conflict",
+  "status": 409,
+  "code": "idempotency_conflict",
+  "detail": "This Idempotency-Key was already used with a different request body.",
+  "request_id": "00000000-0000-4000-8000-000000000090"
+}

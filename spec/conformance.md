@@ -6,7 +6,8 @@ repository currently checks schemas and examples, not server or client behavior.
 | Area | Scenario and required result |
 | --- | --- |
 | Enrollment | Open enrollment becomes active; approval enrollment stays requested. Duplicate requests retain one participation identity. Revoked participants cannot self-resume. |
-| Credentials | Wrong audience/client/project, expired and revoked tokens fail on reads, part writes, renewal and finalization. Account tokens cannot upload. A maintainer cannot mint another account's token. |
+| Pairing | A code yields one working key and then fails with `401`, including when two clients race. Expired codes fail. The response has `Cache-Control: no-store`. Pairing the same installation again revokes the old key. Repeated bad codes return `429`. |
+| Credentials | Unknown, expired and revoked keys fail with `401` on reads, part writes, renewal and finalization. A key limited to one project fails on another. A key cannot exceed the participant's role: a contributor's key cannot publish. Project routes fail without an active participation. |
 | Scoped reads | A project-read token cannot read another participant's private status, submission or assessment job. All conditional scope alternatives are tested independently. |
 | No locks | Two volunteers concurrently publish overlapping intents and upload useful data. Neither can exclude the other; completion and surplus policy determine credit. |
 | Publication | A stale draft ETag fails with 412; missing precondition fails with 428. Publication is atomic and never mutates old requirements or their contribution windows. |
@@ -20,6 +21,7 @@ repository currently checks schemas and examples, not server or client behavior.
 | Quality | Missing optional FWHM is not a failure. Missing a required fresh solve cannot pass. Embedded WCS and target coordinates do not substitute for submitted-pixel evidence. |
 | Retry | Same key/body replays before stale-precondition checks after authenticating. Changed body conflicts. Revocation blocks replay from revealing an earlier protected response. |
 | Multipart | Parts arrive out of order; a lost receipt and repeated identical part do not duplicate bytes. Different content for a completed part conflicts. Validate final-part size and actual digests. |
+| External delivery | A project without `external_delivery` rejects external artifacts. External artifacts get no upload session and await retrieval. Only maintainers record retrieval; a hash mismatch rejects the artifact. Credit follows only after verification and assessment. Links stay hidden from other participants and public views. |
 | Partial batches | One corrupt artifact reports its own failure. Other artifacts remain inspectable. No accepted credit exists before validation and assessment. |
 | Finalize races | Two clients finalize the same manifest concurrently and receive one job. An expired key cannot create duplicate submission/credit identities. |
 | Recalibration | Rejecting a replacement leaves previous credit. Accepting it atomically supersedes the prior artifact; reassessment can subtract credit once. |

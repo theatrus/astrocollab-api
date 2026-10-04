@@ -7,6 +7,19 @@
     "status": 200
   },
   {
+    "file": "pairClient.request.json",
+    "schema": "PairRequest",
+    "operationId": "pairClient",
+    "direction": "request"
+  },
+  {
+    "file": "pairClient.response.json",
+    "schema": "PairedKey",
+    "operationId": "pairClient",
+    "direction": "response",
+    "status": 201
+  },
+  {
     "file": "listProjects.response.json",
     "schema": "ProjectPage",
     "operationId": "listProjects",
@@ -140,26 +153,6 @@
     "schema": "ParticipationReview",
     "operationId": "reviewParticipation",
     "direction": "request"
-  },
-  {
-    "file": "issueParticipationToken.response.json",
-    "schema": "TokenIssued",
-    "operationId": "issueParticipationToken",
-    "direction": "response",
-    "status": 201
-  },
-  {
-    "file": "issueParticipationToken.request.json",
-    "schema": "TokenRequest",
-    "operationId": "issueParticipationToken",
-    "direction": "request"
-  },
-  {
-    "file": "listParticipationTokens.response.json",
-    "schema": "TokenPage",
-    "operationId": "listParticipationTokens",
-    "direction": "response",
-    "status": 200
   },
   {
     "file": "registerEquipment.response.json",
@@ -405,6 +398,19 @@
     "status": 200
   },
   {
+    "file": "recordRetrieval.request.json",
+    "schema": "RetrievalInput",
+    "operationId": "recordRetrieval",
+    "direction": "request"
+  },
+  {
+    "file": "recordRetrieval.response.json",
+    "schema": "Submission",
+    "operationId": "recordRetrieval",
+    "direction": "response",
+    "status": 200
+  },
+  {
     "file": "appendAssessment.response.json",
     "schema": "Assessment",
     "operationId": "appendAssessment",
@@ -433,6 +439,30 @@
     "schema": "Problem"
   },
   {
+    "file": "rate-limited.json",
+    "schema": "Problem"
+  },
+  {
+    "file": "invalid-request.json",
+    "schema": "Problem"
+  },
+  {
+    "file": "idempotency-conflict.json",
+    "schema": "Problem"
+  },
+  {
+    "file": "part-conflict.json",
+    "schema": "Problem"
+  },
+  {
+    "file": "precondition-failed.json",
+    "schema": "Problem"
+  },
+  {
+    "file": "precondition-required.json",
+    "schema": "Problem"
+  },
+  {
     "file": "access-revoked.json",
     "schema": "ChangePage"
   },
@@ -458,6 +488,14 @@
   },
   {
     "file": "recalibrated-submission.json",
+    "schema": "SubmissionCreate"
+  },
+  {
+    "file": "external-delivery-requirements.json",
+    "schema": "RequirementSet"
+  },
+  {
+    "file": "external-submission.json",
     "schema": "SubmissionCreate"
   }
 ]

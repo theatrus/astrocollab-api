@@ -1,14 +1,17 @@
 # Payload walkthrough
 
-These examples use synthetic data and placeholder tokens and hashes.
-The [example index](../examples/manifest.json) maps each file to its schema.
+This page walks through every example payload in order. For a shorter tour
+with requests, read [How the API works](overview.md). The examples use synthetic
+data and placeholder keys and hashes. The [example index](../examples/manifest.json)
+maps each file to its schema, and `python -m reference.client` runs the same flow
+against the [reference server](../reference/README.md).
 
 ## Publish required frames
 
 Create a project with [initial requirements](../examples/createProject.request.json).
 The server returns the [draft and owner membership](../examples/createProject.response.json).
-Obtain a project token with `project:manage`, read the draft ETag, then publish
-with `If-Match` and a new `Idempotency-Key`.
+With the owner's API key, read the draft ETag, then publish with `If-Match` and
+a new `Idempotency-Key`.
 
 The [published revision](../examples/publishProject.response.json) requires
 120 accepted H-alpha frames at 300–600 seconds each, totaling at least 36,000
@@ -16,16 +19,13 @@ seconds. It specifies the M31 footprint, sampling, calibration, linear mono
 processing, fresh pixel solves, an optional FWHM limit and submission deadlines.
 Accepted data must meet both count and integration goals.
 
-## Volunteer and authorize a client
+## Join the project
 
 Join with [current terms consent](../examples/joinProject.request.json).
 Open enrollment returns an [active participation](../examples/joinProject.response.json);
 approval-based enrollment returns `requested` until a maintainer approves it.
-
-Request [project scopes](../examples/issueParticipationToken.request.json).
-The [response](../examples/issueParticipationToken.response.json) supplies a token
-for this participation and client, valid for 900 seconds. Use the account token
-to request replacements. Participation and capture IDs are not credentials.
+The participant's API key now works on this project's routes. Participation
+and capture IDs are not credentials.
 
 ## Configure automatic framing
 
@@ -74,8 +74,8 @@ session for 104,371,200 bytes: twelve parts of 8,388,608 bytes and a final part
 of 3,707,904 bytes. PUT raw binary bytes with `Content-Length` and `X-Part-SHA256`.
 The server verifies each part and returns a [receipt](../examples/putUploadPart.response.json).
 
-After an interruption, read the received-part list and resume. Renew expired
-upload sessions and participation tokens separately.
+After an interruption, read the received-part list and resume. Renew an expired
+upload session with `POST /uploads/{id}/renew`.
 
 Once the server acknowledges all parts, finalize the submission. It returns an
 [assessment job](../examples/finalizeSubmission.response.json) that verifies the
@@ -89,6 +89,13 @@ integration separately from intent, reported captures and pending data.
 [Recalibration](../examples/recalibrated-submission.json) uses a new artifact ID
 and `supersedes_artifact_id` but retains capture identity. Acceptance replaces
 existing credit rather than counting the exposure twice.
+
+Projects that accept [external delivery](../examples/external-delivery-requirements.json)
+let contributors share files through a service such as Google Drive. The
+[manifest](../examples/external-submission.json) registers the link and hash in
+place of an upload. A maintainer downloads the file and
+[records the retrieval](../examples/recordRetrieval.request.json); the
+[submission](../examples/recordRetrieval.response.json) then moves to validation.
 
 ## Sync project revisions
 

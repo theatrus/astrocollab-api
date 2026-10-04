@@ -9,12 +9,14 @@ repetition and claims that add no requirement. Keep protocol terms, units,
 authorization rules and failure behavior explicit.
 
 For a contract change, update the relevant section of `spec/protocol.md`, the
-OpenAPI schema, JSON examples and conformance scenarios together.
+TypeSpec source, JSON examples and conformance scenarios together. Regenerate
+`openapi/astrocollab.yaml` with `python tools/build_openapi.py`; never edit it by
+hand.
 Add rejection fixtures for new structural constraints. Specify authorization,
 retry behavior and state changes for every mutation. Preserve nonexclusive
 participation and assessment before credit.
 
-Run `python tools/validate.py` and `git diff --check`. Report these as contract
+Run `python tools/validate.py`, the unit tests and `git diff --check`. Report these as contract
 checks, not implementation tests. Real credentials, sites, images and personal
 data do not belong in fixtures. Use reserved example domains.
 
