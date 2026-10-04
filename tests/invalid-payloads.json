@@ -1,5 +1,5 @@
 [
-  {"name":"RA cannot be hours or 360 degrees at the upper boundary", "base":"getProjectRevision.response.json", "mutations":[{"op":"set","path":["requirements","targets",0,"footprint","center","ra_degrees"],"value":360}], "expected_validator":"exclusiveMaximum"},
+  {"name":"RA upper boundary is exclusive", "base":"getProjectRevision.response.json", "mutations":[{"op":"set","path":["requirements","targets",0,"footprint","center","ra_degrees"],"value":360}], "expected_validator":"exclusiveMaximum"},
   {"name":"declination out of range", "base":"getProjectRevision.response.json", "mutations":[{"op":"set","path":["requirements","targets",0,"footprint","center","dec_degrees"],"value":91}], "expected_validator":"maximum"},
   {"name":"goal must require frames or integration", "base":"getProjectRevision.response.json", "mutations":[{"op":"set","path":["requirements","objectives",0,"goal"],"value":{}}], "expected_validator":"anyOf"},
   {"name":"participation token cannot request hardware scope", "base":"issueParticipationToken.request.json", "mutations":[{"op":"set","path":["scopes"],"value":["hardware:control"]}], "expected_validator":"enum"},
