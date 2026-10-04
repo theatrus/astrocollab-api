@@ -1,8 +1,6 @@
 # PSF Guard integration
 
-This is a proposed adapter, not implemented behavior or a protocol dependency.
-AstroCollab's canonical specification is independent of PSF Guard storage and
-Director execution. This document holds the original client's integration notes.
+Proposed PSF Guard adapter; not implemented.
 
 - Map `(server_id, project_id)` to the existing global Library project and
   retain remote published revisions separately from local reviewed intent.
@@ -29,6 +27,5 @@ Director execution. This document holds the original client's integration notes.
 - Keep catalog activation and database changes behind existing management gates.
   Public participation tokens never authorize local management or remote sync.
 
-The native Director API and existing trusted-peer database transfer remain
-separate. This adapter requires its own implementation request, regression tests
-and user documentation in PSF Guard.
+Keep the Director API and peer database transfer separate. Implement and test
+this adapter in PSF Guard.

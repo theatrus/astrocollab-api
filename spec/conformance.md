@@ -1,9 +1,7 @@
 # Conformance scenarios
 
-These are obligations for future server/client integration tests. This repository
-currently validates only OpenAPI structure and payload fixtures; no runtime
-conformance is claimed. A service must prove the stateful scenarios below before
-advertising conformance to a stable release.
+Implementations must pass these scenarios before claiming conformance. This
+repository currently checks schemas and examples, not server or client behavior.
 
 | Area | Scenario and required result |
 | --- | --- |
@@ -15,10 +13,10 @@ advertising conformance to a stable release.
 | Automatic framing | Register equipment, review bounds once, then check in as project deficits change. A compatible panel/center change can be adopted without a new prompt. It retains policy, demand and framing provenance. |
 | Automatic bounds | A changed target position under the same ID, manual rotation, filter, setup revision, terms or time budget cannot escape the saved policy. `automatic_eligible` alone cannot authorize adoption. |
 | Acquisition boundary | A framing revision changes only future work at a safe boundary. A capture underway retains its original objective/revision. Offline work stops starting after cached policy validity expires. |
-| No useful work | A check-in may return wait/keep-current, without a fake allocation or an infinite retry loop. Recommendation failure leaves the existing still-valid local plan intact. |
-| Mosaic | Two canonical tiles need independent depth. A wide frame may satisfy both when coverage allows; a narrow frame cannot claim the whole target from its center alone. Distinct project integration remains a capture union. |
+| No useful work | Check-in returns wait or keep-current with a retry interval. Recommendation failure preserves the current plan until it expires. |
+| Mosaic | Track depth for each target region. Credit a frame only where it meets coverage requirements. Count its integration once in project totals, even if it covers several regions. |
 | Budgets | Multiple rigs, daylight-saving transitions, month boundaries and projects on two servers do not multiply local offered time. Accepted integration differs from attempted rig-hours. |
-| Geometry | RA wrap, polar fields, rectangle orientation and footprint coverage use the specified celestial conventions. Missing optics yields review rather than guessed geometry. |
+| Geometry | Check RA wrap, polar fields, rectangle orientation and coverage against the coordinate conventions. Request missing optical geometry before planning. |
 | Quality | Missing optional FWHM is not a failure. Missing a required fresh solve cannot pass. Embedded WCS and target coordinates do not substitute for submitted-pixel evidence. |
 | Retry | Same key/body replays before stale-precondition checks after authenticating. Changed body conflicts. Revocation blocks replay from revealing an earlier protected response. |
 | Multipart | Parts arrive out of order; a lost receipt and repeated identical part do not duplicate bytes. Different content for a completed part conflicts. Validate final-part size and actual digests. |
@@ -26,17 +24,12 @@ advertising conformance to a stable release.
 | Finalize races | Two clients finalize the same manifest concurrently and receive one job. An expired key cannot create duplicate submission/credit identities. |
 | Recalibration | Rejecting a replacement leaves previous credit. Accepting it atomically supersedes the prior artifact; reassessment can subtract credit once. |
 | Attribution | Same raw/artifact content under different producer identities triggers review without leaking another contributor's private manifest. |
-| Terms/closure | Current consent is required for finalization, including older eligible capture revisions. Deadline boundaries are exclusive. Project closure does not silently erase published late-data policy. |
+| Terms/closure | Finalization requires current consent, including captures from older eligible revisions. Deadlines are exclusive. Closure preserves published late-submission rules. |
 | Snapshot | A change during pagination is neither lost nor duplicated after installing the watermark. A revoked membership during pagination invalidates the snapshot. An expired cursor requires rebootstrap. |
 | Tombstones | Access removal reveals no further private project contents; resume requires a new snapshot. User-owned local captures survive disconnection. |
 | Status | Lower sequence is ignored, equal identical status retries, equal conflicting status fails. Expired status is visibly stale and cannot create accepted credit. |
 | Abuse | Oversized JSON/images, decompression bombs, malicious paths, arbitrary fetch URLs and cross-project identifiers cannot bypass authorization or resource bounds. |
 
-Structural rejection fixtures live in [tests/invalid-payloads.json](../tests/invalid-payloads.json).
-They cover coordinate bounds, credential scope/expiry, unknown request fields,
-capacity, automatic-region consent, artifact identity/digest, pixel scale,
-assessment credit, recommendation review flags and snapshot/job state shapes.
-
-Cross-field and database rules (for example ordered ranges, existing IDs, matching
-digests, one credit per capture and real spherical coverage) are intentionally
-listed as semantic requirements. JSON Schema cannot prove their implementation.
+[Rejection fixtures](../tests/invalid-payloads.json) test structural constraints.
+Implementations must separately test range ordering, referenced IDs, hashes,
+unique capture credit and spherical coverage.

@@ -95,20 +95,20 @@ function renderSidebar() {
   $('#operation-list').innerHTML = [...groups].map(([key, ops]) => `<div class="endpoint-group-title">${escapeHtml(groupNames[key] || key)}</div>${ops.map(op => `<a class="endpoint-nav" href="#operation/${op.operationId}" ${selected === op.operationId ? 'aria-current="page"' : ''}>${badge(op.method)}<span>${escapeHtml(op.summary)}</span></a>`).join('')}`).join('') || '<div class="empty-results">No matching operations. Try a method, path, or “framing”.</div>';
 }
 function renderReferenceHome() {
-  $('#endpoint-content').innerHTML = `<p class="eyebrow">THE ASTROCOLLAB CONTRACT / ${escapeHtml(contract.info.version)}</p><h1>A reference for every contribution.</h1><p class="reference-intro">Explore ${operations.length} operations, from discovering projects to assessing calibrated exposures. Request examples and schemas come directly from the OpenAPI contract.</p><div class="notice">This is a draft specification, not a running API. <code>collab.example</code> is a reserved example domain. Requests are shown for reference and are never sent from this page.</div><div class="operation-cards">${[
-    ['getCapabilities','Start with discovery','Find the API root, service capabilities, formats and limits.'],
-    ['issueParticipationToken','Authorize a contribution','Issue a short-lived token scoped to one client and project.'],
-    ['checkIn','Refresh framing automatically','Turn equipment and progress into coverage-driven planning advice.'],
+  $('#endpoint-content').innerHTML = `<p class="eyebrow">ASTROCOLLAB API / ${escapeHtml(contract.info.version)}</p><h1>API reference</h1><p class="reference-intro">${operations.length} operations. Schemas and examples come from the OpenAPI specification.</p><div class="notice">Draft specification. <code>collab.example</code> is a placeholder. This page does not send API requests.</div><div class="operation-cards">${[
+    ['getCapabilities','Service discovery','Find the API root, service capabilities, formats and limits.'],
+    ['issueParticipationToken','Participation tokens','Issue a short-lived token scoped to one client and project.'],
+    ['checkIn','Automatic framing','Request updated framing using equipment and project progress.'],
     ['createSubmission','Submit calibrated data','Send a manifest, resume verified parts, and receive assessments.'],
-    ['createSnapshot','Keep project state in sync','Bootstrap a consistent view, then follow ordered changes.'],
-    ['appendAssessment','Record quality and credit','Append evidence-based decisions without counting captures twice.']
+    ['createSnapshot','Project sync','Read a snapshot, then apply ordered changes.'],
+    ['appendAssessment','Record quality and credit','Record assessments and count each capture once.']
   ].map(([id,title,description]) => `<a class="operation-card" href="#operation/${id}"><p class="eyebrow">${id}</p><h2>${title} ↗</h2><p>${description}</p></a>`).join('')}</div>`;
 }
 function renderOperation(op) {
   const parameters = (op.parameters || []).map(resolve);
   const context = op['x-token-context'].replaceAll('_', ' ');
   const scopes = op['x-required-scopes'];
-  let html = `<p class="eyebrow">${escapeHtml(groupNames[op.tags[0]] || op.tags[0])} / ${escapeHtml(op.operationId)}</p><h1>${escapeHtml(op.summary)}</h1><div class="endpoint-path">${badge(op.method)}<code>${escapeHtml(op.path)}</code></div>${op.description ? `<p class="endpoint-description">${escapeHtml(op.description)}</p>` : ''}<div class="auth-box"><b>Authorization</b> · ${escapeHtml(context)}<p>${scopes.length ? scopes.map(scope => `<span class="scope">${escapeHtml(scope)}</span>`).join('') : 'No default scope required.'}</p>${op['x-scope-rules'] ? `<p>Conditional scope alternatives apply. Each inner list is AND; alternative lists are OR.</p>${codeBlock(op['x-scope-rules'],'SCOPE RULES')}` : ''}<p>Scopes do not replace membership, project, and ownership checks. <a class="text-link" href="#guide/protocol/3-account-authorization-and-project-tokens">Authorization rules ↗</a></p></div>`;
+  let html = `<p class="eyebrow">${escapeHtml(groupNames[op.tags[0]] || op.tags[0])} / ${escapeHtml(op.operationId)}</p><h1>${escapeHtml(op.summary)}</h1><div class="endpoint-path">${badge(op.method)}<code>${escapeHtml(op.path)}</code></div>${op.description ? `<p class="endpoint-description">${escapeHtml(op.description)}</p>` : ''}<div class="auth-box"><b>Authorization</b> · ${escapeHtml(context)}<p>${scopes.length ? scopes.map(scope => `<span class="scope">${escapeHtml(scope)}</span>`).join('') : 'No default scope required.'}</p>${op['x-scope-rules'] ? `<p>Conditional scope alternatives apply. Each inner list is AND; alternative lists are OR.</p>${codeBlock(op['x-scope-rules'],'SCOPE RULES')}` : ''}<p>The server also checks membership, project and resource ownership. <a class="text-link" href="#guide/protocol/3-account-authorization-and-project-tokens">Authorization rules ↗</a></p></div>`;
   if (parameters.length) html += `<section class="reference-section"><h2>Parameters</h2><div class="table-scroll"><table class="parameter-table"><thead><tr><th>NAME / LOCATION</th><th>TYPE / REQUIREMENT</th><th>DETAILS</th></tr></thead><tbody>${parameters.map(p => `<tr><td><code>${escapeHtml(p.name)}</code><small>${escapeHtml(p.in)}</small></td><td>${escapeHtml(typeName(p.schema))}<br><span class="${p.required ? 'required' : 'optional'}">${p.required ? 'required' : 'optional'}</span></td><td>${escapeHtml(p.description || '')}${constraints(p.schema)}</td></tr>`).join('')}</tbody></table></div></section>`;
   const request = op.requestBody;
   if (request) {
@@ -121,7 +121,7 @@ function renderOperation(op) {
     }
     html += '</section>';
   }
-  html += `<section class="reference-section"><h2>Request example</h2><p class="reference-note">Illustrative cURL. Replace IDs, credentials and preconditions with your service’s values. No requests are executed here.</p>${codeBlock(curlExample(op),'CURL',true)}</section><section class="reference-section"><h2>Responses</h2><label class="response-select">HTTP status<select id="response-status">${Object.entries(op.responses).map(([status,raw]) => `<option value="${escapeHtml(status)}">${escapeHtml(status)} — ${escapeHtml(resolve(raw).description)}</option>`).join('')}</select></label><div id="response-content"></div></section><p class="reference-note">Structural schemas describe this draft. See the <a href="#guide/protocol">protocol</a> for lifecycle, retry, privacy and astronomy requirements. <a href="./openapi/astrocollab.yaml" download>Download the full contract ↓</a></p>`;
+  html += `<section class="reference-section"><h2>Request example</h2><p class="reference-note">Replace example IDs, credentials and preconditions before running this command.</p>${codeBlock(curlExample(op),'CURL',true)}</section><section class="reference-section"><h2>Responses</h2><label class="response-select">HTTP status<select id="response-status">${Object.entries(op.responses).map(([status,raw]) => `<option value="${escapeHtml(status)}">${escapeHtml(status)} — ${escapeHtml(resolve(raw).description)}</option>`).join('')}</select></label><div id="response-content"></div></section><p class="reference-note">See the <a href="#guide/protocol">protocol</a> for lifecycle, retry, privacy and astronomy requirements. <a href="./openapi/astrocollab.yaml" download>Download the full contract ↓</a></p>`;
   $('#endpoint-content').innerHTML = html;
   function updateResponse() {
     const status = $('#response-status').value;
@@ -156,7 +156,7 @@ function route() {
   const view = ['reference','operation'].includes(name) ? 'reference' : name === 'guide' ? 'guide' : 'overview';
   document.querySelectorAll('.view').forEach(el => { el.hidden = el.id !== `${view}-view`; });
   document.querySelectorAll('[data-nav]').forEach(a => a.setAttribute('aria-current', a.dataset.nav === view ? 'page' : 'false'));
-  document.title = 'AstroCollab — A shared sky. An open protocol.';
+  document.title = 'AstroCollab — Collaborative astrophotography API';
   if (view === 'guide') renderGuide(item || 'walkthrough',anchor);
   if (view === 'reference') {
     if (!contract) return;

@@ -3,8 +3,8 @@ jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: AstroCollab API
   version: 0.1.0-draft.1
-  description: Draft independent collaborative astrophotography protocol. No target locks or equipment
-    commands. See spec/protocol.md for normative lifecycle and authorization semantics.
+  description: Draft API for collaborative astrophotography. See spec/protocol.md for resource states,
+    authorization and protocol requirements.
   license:
     name: MIT
     identifier: MIT
@@ -27,7 +27,7 @@ paths:
   /capabilities:
     get:
       operationId: getCapabilities
-      summary: Discover service identity, limits and features
+      summary: Read server identity, limits and features
       tags:
       - capabilities
       security: []
@@ -90,7 +90,7 @@ paths:
   /projects:
     get:
       operationId: listProjects
-      summary: Discover visible projects
+      summary: List visible projects
       tags:
       - projects
       security:
@@ -601,7 +601,7 @@ paths:
   /projects/{project_id}/publish:
     post:
       operationId: publishProject
-      summary: Publish the exact draft as an immutable revision
+      summary: Publish the draft as an immutable revision
       tags:
       - projects
       security:
@@ -866,7 +866,7 @@ paths:
   /projects/{project_id}/objectives:
     get:
       operationId: listObjectives
-      summary: Read frame objectives from an exact revision
+      summary: Read objectives from a published revision
       tags:
       - projects
       security:
@@ -1043,7 +1043,7 @@ paths:
   /me/participations:
     get:
       operationId: listMyParticipations
-      summary: List own membership states including revoked
+      summary: List own memberships, including revoked memberships
       tags:
       - me
       security:
@@ -1438,7 +1438,7 @@ paths:
   /participations/{participation_id}/equipment/{equipment_id}:
     put:
       operationId: registerEquipment
-      summary: Register equipment and obtain coverage-driven planning advice
+      summary: Register equipment and request framing advice
       tags:
       - participations
       security:
@@ -2129,7 +2129,7 @@ paths:
   /participations/{participation_id}/checkins:
     post:
       operationId: checkIn
-      summary: Refresh coverage advice from current equipment and progress
+      summary: Report progress and request framing advice
       tags:
       - participations
       security:
@@ -2192,7 +2192,7 @@ paths:
   /projects/{project_id}/recommendations:
     post:
       operationId: requestRecommendation
-      summary: Queue equipment-aware framing or mosaic recommendations
+      summary: Request framing or mosaic recommendations
       tags:
       - projects
       security:
@@ -2428,7 +2428,7 @@ paths:
   /participations/{participation_id}/status/{writer_id}:
     put:
       operationId: reportStatus
-      summary: Report coalesced optional activity without credit
+      summary: Report current activity
       tags:
       - participations
       security:
@@ -2537,7 +2537,7 @@ paths:
   /projects/{project_id}/progress:
     get:
       operationId: getProgress
-      summary: Read accepted demand and separate advisory counters
+      summary: Read goals and contribution progress
       tags:
       - projects
       security:
@@ -2599,7 +2599,7 @@ paths:
   /sync/snapshots:
     post:
       operationId: createSnapshot
-      summary: Freeze selected authorized projects for consistent sync
+      summary: Create a consistent snapshot of selected projects
       tags:
       - sync
       security:
@@ -3618,7 +3618,7 @@ paths:
   /submissions/{submission_id}/finalize:
     post:
       operationId: finalizeSubmission
-      summary: Verify bytes and queue assessment exactly once
+      summary: Finalize uploads and queue assessment
       tags:
       - submissions
       security:
@@ -3662,7 +3662,7 @@ paths:
   /submissions/{submission_id}/assessments:
     get:
       operationId: listAssessments
-      summary: Read durable versioned per-artifact assessments
+      summary: Read artifact assessment history
       tags:
       - submissions
       security:
@@ -3729,7 +3729,7 @@ paths:
         - - submission:read-all
     post:
       operationId: appendAssessment
-      summary: Append a decision and transactionally reconcile credit
+      summary: Append an assessment and update credit atomically
       tags:
       - submissions
       security:
@@ -5183,8 +5183,7 @@ components:
       required:
       - target_id
       - center_region
-      description: Reviewed region within which suggested panel centers may move; target identity alone
-        cannot authorize a changed sky position.
+      description: Approved bounds for panel centers. A target ID alone does not authorize a new position.
     PlanningPolicyInput:
       type: object
       additionalProperties: false
