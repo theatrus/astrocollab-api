@@ -1,17 +1,21 @@
 """Micro AstroCollab reference server.
 
-An in-memory server for the draft protocol. It shows how the rules in
+An in-memory server for the contributor API. It shows how the rules in
 spec/protocol.md fit together; it is not built for production. It keeps all
 state in memory, trusts the clock, and handles one request at a time.
 
 The server reads openapi/astrocollab.yaml at start. It uses the contract to
-route requests, validate request bodies and find each operation's credential
-context and scopes, so the code below holds only the behaviour that a schema
-cannot express.
+route requests and validate request bodies, so the code below holds only the
+behaviour that a schema cannot express.
+
+Projects, memberships and manual reviews are not part of the API. A real
+server manages them in its own web pages; this one offers them as "server
+tools": plain methods on Api (create_project, publish, join, assess_artifact,
+record_retrieval), and the --join flag.
 
 Run it:
 
-    python -m reference.server --port 8080 --key owner=OWNER_SECRET --key alice=ALICE_SECRET
+    python -m reference.server --port 8080 --key alice=ALICE_SECRET
 """
 from __future__ import annotations
 
@@ -34,20 +38,14 @@ import uuid
 from jsonschema import Draft202012Validator, FormatChecker
 import yaml
 
-CONTRACT_PATH = Path(__file__).resolve().parents[1] / "openapi/astrocollab.yaml"
+from reference import planning
 
-ACCOUNT_SCOPES = {"account:read", "participation:manage", "project:create"}
-PARTICIPANT_SCOPES = {"project:read", "offer:write", "intent:write", "status:write",
-                      "submission:write", "submission:read-own"}
-MAINTAINER_SCOPES = PARTICIPANT_SCOPES | {"project:manage", "participation:review",
-                                          "assessment:write", "submission:read-all"}
-ROLE_SCOPES = {"contributor": PARTICIPANT_SCOPES, "maintainer": MAINTAINER_SCOPES,
-               "owner": MAINTAINER_SCOPES}
-ALL_SCOPES = frozenset(ACCOUNT_SCOPES | MAINTAINER_SCOPES)
-INACTIVE = {"paused", "withdrawn", "revoked"}
+CONTRACT_PATH = Path(__file__).resolve().parents[1] / "openapi/astrocollab.yaml"
+SAMPLE_PATH = Path(__file__).resolve().parent / "sample_project.json"
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 ASSESSOR_ID = "00000000-0000-4000-8000-0000000a55e5"  # The automatic assessor.
-PAGE_SIZE = 50
+RIG_DEFAULTS = {"binning_x": 1, "binning_y": 1, "rotation": "fixed",
+                "confirmed_position_angle_degrees": 0}
 
 
 class Problem(Exception):
@@ -63,7 +61,6 @@ class Credential:
     """An API key. Its ID serves as the client ID."""
     account_id: str
     client_id: str
-    scopes: frozenset
     project_ids: frozenset | None = None  # None: the key covers every project.
 
 
@@ -76,6 +73,9 @@ class Request:
     body: object
     raw: bytes
     cred: Credential | None
+
+
+# ---- Small helpers ------------------------------------------------------------
 
 
 def now() -> datetime:
@@ -94,14 +94,6 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
-def canonical(value: object) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-
-
-def etag(value: object) -> str:
-    return '"' + hashlib.sha256(canonical(value)).hexdigest()[:32] + '"'
-
-
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -112,7 +104,7 @@ def public(record: dict) -> dict:
 
 
 def encode_cursor(value: dict) -> str:
-    return base64.urlsafe_b64encode(canonical(value)).decode()
+    return base64.urlsafe_b64encode(json.dumps(value, sort_keys=True).encode()).decode()
 
 
 def decode_cursor(text: str) -> dict:
@@ -122,6 +114,52 @@ def decode_cursor(text: str) -> dict:
         return value
     except Exception:
         raise Problem(400, "invalid_cursor", "The cursor is not valid.") from None
+
+
+def with_defaults(config: dict) -> dict:
+    """A rig description with the contract's defaults filled in."""
+    return {**RIG_DEFAULTS, **config}
+
+
+def merge_patch(target, patch):
+    """RFC 7396 merge patch: null removes a field; arrays replace whole."""
+    if not isinstance(patch, dict):
+        return patch
+    result = dict(target) if isinstance(target, dict) else {}
+    for key, value in patch.items():
+        if value is None:
+            result.pop(key, None)
+        else:
+            result[key] = merge_patch(result.get(key), value)
+    return result
+
+
+def captures_of(manifest: dict) -> list[tuple]:
+    """(origin_id, capture_id) pairs in an artifact: one for a sub, every sub for a master."""
+    if "stack" in manifest:
+        return [(s["origin_id"], s["capture_id"]) for s in manifest["stack"]["subs"]]
+    return [(manifest["origin_id"], manifest["capture_id"])]
+
+
+def frames_in(manifest: dict) -> int:
+    return manifest["stack"]["sub_count"] if "stack" in manifest else 1
+
+
+def integration_of(manifest: dict) -> float:
+    return manifest["stack"]["integration_seconds"] if "stack" in manifest else manifest["exposure_seconds"]
+
+
+def objectives_served(requirements: dict, objective: dict, passbands: list, exposure: float) -> list:
+    """The objective, plus others on the same target and processing group that a
+    frame through these passbands also serves (a dual-band filter serves two)."""
+    served = [objective["id"]]
+    for other in requirements["objectives"]:
+        if other["id"] != objective["id"] and other["target_id"] == objective["target_id"] \
+                and other["processing_group_id"] == objective["processing_group_id"] \
+                and other["exposure"]["min_seconds"] <= exposure <= other["exposure"]["max_seconds"] \
+                and planning.serves(passbands, other["bandpasses"]):
+            served.append(other["id"])
+    return served
 
 
 class Api:
@@ -138,39 +176,32 @@ class Api:
         for path, item in self.contract["paths"].items():
             pattern = re.compile("^" + re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", path) + "$")
             for method, op in item.items():
-                # Resolve shared parameters once, so handlers see plain names.
                 op["parameters"] = [self.resolve(p) for p in op.get("parameters", [])]
                 self.routes.append((method.upper(), pattern, op))
         self.server_id = new_id()
         self.limits = {
             "max_json_bytes": 1 << 20, "max_artifacts_per_submission": 100,
             "max_artifact_bytes": 256 << 20, "max_chunk_bytes": max(part_size, 1 << 20),
-            "idempotency_retention_seconds": 86400, "snapshot_ttl_seconds": 900,
-            "change_retention_seconds": 2592000, "upload_staging_seconds": 86400,
-            "max_decoded_pixels": 200000000,
+            "upload_staging_seconds": 86400, "max_decoded_pixels": 200000000,
         }
-        # State. Every dict maps an ID to a stored record.
+        # State. Every dict maps an ID to a stored record unless noted.
         self.accounts: dict[str, str] = {}  # account name -> account ID
         self.keys: dict[str, dict] = {}  # sha256(secret) -> key record
         self.pairing_codes: dict[str, dict] = {}  # sha256(code) -> pending grant
-        self.projects: dict[str, dict] = {}
-        self.drafts: dict[str, dict] = {}
-        self.revisions: dict[str, list] = {}
-        self.participations: dict[str, dict] = {}
-        self.equipment: dict[tuple, list] = {}  # (participation, equipment) -> revisions
-        self.capacity: dict[str, list] = {}
-        self.policies: dict[str, list] = {}
-        self.intents: dict[tuple, list] = {}
-        self.status: dict[tuple, dict] = {}
+        self.projects: dict[str, dict] = {}  # project ID -> {"revisions": [...], "state": ...}
+        self.members: dict[tuple, dict] = {}  # (account, project) -> membership
+        self.equipment: dict[tuple, list] = {}  # (account, equipment) -> revisions
+        self.assignments: dict[str, dict] = {}
+        self.latest: dict[str, str] = {}  # equipment -> latest assignment ID
+        self.reported: dict[str, list] = {}  # equipment -> latest unsubmitted_captures report
+        self.panel_objectives: dict[str, list] = {}  # panel -> objectives it was assigned for
+        self.layouts: dict[tuple, list] = {}  # (project, target) -> panel grids
+        self.panels: dict[str, dict] = {}  # panel ID -> project, target and footprint
         self.submissions: dict[str, dict] = {}
         self.uploads: dict[str, dict] = {}
         self.artifacts: dict[str, dict] = {}
-        self.assessments: dict[str, dict] = {}
-        self.credits: dict[tuple, dict] = {}  # (project, objective, origin, capture) -> credit
-        self.jobs: dict[str, dict] = {}
-        self.snapshots: dict[str, dict] = {}
-        self.events: list[dict] = []
-        self.idempotency: dict[tuple, dict] = {}
+        self.credits: dict[tuple, dict] = {}  # (project, objective, artifact) -> credit
+        self.claimed: dict[tuple, str] = {}  # (project, origin, capture) -> crediting artifact
         for name, secret in keys.items():
             self.add_account(name, secret)
 
@@ -183,323 +214,113 @@ class Api:
             node = target
         return node
 
+    # ---- Server tools ------------------------------------------------------
+    # What a real server does through its own web pages. Not part of the API.
+
     def add_account(self, name: str, secret: str) -> str:
-        """Create an account (if new) with an API key that holds every scope. For tests."""
-        account_id = self.accounts.setdefault(name, new_id())
-        self.keys[sha256(secret.encode())] = {
-            "id": new_id(), "account_id": account_id, "scopes": ALL_SCOPES,
-            "client_name": "direct key", "installation_id": None, "project_ids": None,
-            "expires_at": None, "revoked": False}
-        return account_id
+        """Create an account (if new) with an API key. For tests and demos."""
+        with self.lock:
+            account_id = self.accounts.setdefault(name, new_id())
+            self.keys[sha256(secret.encode())] = {
+                "id": new_id(), "account_id": account_id, "client_name": "direct key",
+                "installation_id": None, "project_ids": None, "expires_at": None, "revoked": False}
+            return account_id
 
-    def issue_pairing_code(self, account: str, code: str | None = None, scopes=ALL_SCOPES,
-                           project_ids: list | None = None, key_ttl: int | None = None) -> str:
-        """Do what the account pages do: issue a single-use code that expires in an hour.
+    def issue_pairing_code(self, account: str, code: str | None = None,
+                           project_ids: list | None = None, key_ttl: int | None = None,
+                           equipment_id: str | None = None) -> str:
+        """Issue a single-use code that expires in an hour, as the account pages do.
 
-        scopes, project_ids and key_ttl stand for the choices the user makes
-        when issuing the code; the paired key inherits them.
+        project_ids and key_ttl stand for the choices the user makes when issuing
+        the code; the paired key inherits them. equipment_id names the rig the
+        code was issued for, which pairing returns to the client.
         """
         with self.lock:
             account_id = self.accounts.setdefault(account, new_id())
             code = code or "acpc_" + secrets.token_urlsafe(24)
             self.pairing_codes[sha256(code.encode())] = {
-                "account_id": account_id, "scopes": frozenset(scopes),
-                "project_ids": sorted(project_ids) if project_ids else None,
-                "key_ttl": key_ttl, "expires_at": now() + timedelta(hours=1)}
+                "account_id": account_id, "project_ids": sorted(project_ids) if project_ids else None,
+                "key_ttl": key_ttl, "equipment_id": equipment_id,
+                "expires_at": now() + timedelta(hours=1)}
             return code
 
-    # ---- Dispatch -------------------------------------------------------
+    def create_project(self, requirements: dict, project_id: str | None = None,
+                       state: str = "open") -> str:
+        """Create a project and publish its first revision."""
+        with self.lock:
+            project_id = project_id or new_id()
+            if project_id in self.projects:
+                raise Problem(409, "id_conflict", "A project with this ID exists.")
+            self.projects[project_id] = {"revisions": [], "state": state}
+            self.publish(project_id, requirements)
+            return project_id
 
-    def handle(self, method: str, target: str, headers: dict, raw: bytes):
-        """Return (status, headers, body bytes) for one HTTP request."""
-        request_id = new_id()
-        headers = {k.lower(): v for k, v in headers.items()}
-        op = None
-        try:
-            url = urlsplit(target)
-            if not url.path.startswith("/v1/"):
-                raise Problem(404, "not_found", "No such route.")
-            path = url.path[3:]
-            matches = [(m, p, o) for m, p, o in self.routes if p.match(path)]
-            if not matches:
-                raise Problem(404, "not_found", "No such route.")
-            found = [(p, o) for m, p, o in matches if m == method]
-            if not found:
-                raise Problem(405, "method_not_allowed", "The route does not support this method.")
-            pattern, op = found[0]
-            params = pattern.match(path).groupdict()
-            for name, value in params.items():
-                if name in ("revision", "part_number"):
-                    if not value.isdigit() or int(value) < 1:
-                        raise Problem(404, "not_found", "No such resource.")
-                    params[name] = int(value)
-                elif not UUID_RE.match(value):
-                    raise Problem(404, "not_found", "No such resource.")
-            query = {k: v[0] for k, v in parse_qs(url.query).items()}
-            with self.lock:
-                status, body, extra = self.dispatch(op, params, query, headers, raw)
-        except Exception as error:  # A bug: answer 500 rather than drop the connection.
-            if not isinstance(error, Problem):
-                detail = f"{type(error).__name__}: {error}"[:2000] if self.check_responses \
-                    else "The server failed to handle the request."
-                error = Problem(500, "internal_error", detail)
-            problem = error
-            status, extra = problem.status, {}
-            body = {"type": "about:blank", "title": problem.code.replace("_", " ").capitalize(),
-                    "status": problem.status, "code": problem.code, "detail": problem.detail,
-                    "request_id": request_id}
-            if problem.errors:
-                body["errors"] = problem.errors[:100]
-            if problem.status == 429:
-                extra["Retry-After"] = "1"
-        if self.check_responses and op is not None and body is not None:
-            try:
-                self.check_response(op, status, body)
-            except AssertionError as error:
-                status, body = 500, {"type": "about:blank", "title": "Contract violation",
-                                     "status": 500, "code": "contract_violation",
-                                     "detail": str(error)[:2000], "request_id": request_id}
-        out = {"X-Request-Id": request_id, **extra}
-        if body is None:
-            return status, out, b""
-        out["Content-Type"] = "application/problem+json" if status >= 400 else "application/json"
-        return status, out, json.dumps(body, ensure_ascii=False).encode()
+    def publish(self, project_id: str, requirements: dict, state: str | None = None) -> int:
+        """Publish new requirements as the project's next immutable revision."""
+        with self.lock:
+            self.validate("RequirementSet", requirements)
+            self.check_requirements(requirements)
+            project = self.projects[project_id]
+            project["revisions"].append({"requirements": requirements, "published_at": ts(now())})
+            if state:
+                project["state"] = state
+            return len(project["revisions"])
 
-    def dispatch(self, op, params, query, headers, raw):
-        cred = self.authenticate(headers)
-        names = {p["name"] for p in op.get("parameters", [])}
-        body = None
-        media = op.get("requestBody", {}).get("content", {})
-        if "application/json" in media:
-            if len(raw) > self.limits["max_json_bytes"]:
-                raise Problem(413, "payload_too_large", "The JSON body is too large.")
-            try:
-                body = json.loads(raw or b"null")
-            except ValueError:
-                raise Problem(400, "invalid_json", "The body is not valid JSON.") from None
-            self.validate(media["application/json"]["schema"]["$ref"].split("/")[-1], body)
-        req = Request(op, params, query, headers, body, raw, cred)
+    def join(self, account: str, project_id: str, membership: str = "active") -> None:
+        """Make an account a member of a project, consenting to its current terms."""
+        with self.lock:
+            account_id = self.accounts.setdefault(account, new_id())
+            if project_id not in self.projects:
+                raise Problem(404, "not_found", "No such project.")
+            self.members[(account_id, project_id)] = {
+                "state": membership, "terms": self.requirements(project_id)["terms"]}
 
-        # Retries: replay a stored result for the same key and body.
-        slot = None
-        if "Idempotency-Key" in names:
-            key = headers.get("idempotency-key", "")
-            if not UUID_RE.match(key.lower()):
-                raise Problem(400, "idempotency_key_required", "Send a UUID Idempotency-Key header.")
-            if cred is None:
-                raise Problem(401, "authentication_required", "Send an API key.")
-            slot = (cred.client_id, op["operationId"], json.dumps(params, sort_keys=True), key.lower())
-            stored = self.idempotency.get(slot)
-            if stored:
-                if stored["hash"] != sha256(raw):
-                    raise Problem(409, "idempotency_conflict",
-                                  "This Idempotency-Key was used with a different request.")
-                part = self.participations.get(stored["participation_id"] or "")
-                if part and part["state"] != "active":
-                    raise Problem(403, "participation_inactive", "The participation is not active.")
-                return stored["status"], stored["body"], dict(stored["headers"])
+    def assess_artifact(self, artifact_id: str, decision: str, reasons: list | None = None) -> dict:
+        """Record a maintainer's decision on a validated artifact, replacing the
+        automatic one. Acceptance credits it as automatic acceptance would."""
+        with self.lock:
+            artifact = self.artifacts[artifact_id]
+            if artifact["state"] not in ("accepted", "rejected"):
+                raise Problem(409, "artifact_not_validated", "Only validated artifacts can be assessed.")
+            sub = self.submissions[artifact["_submission_id"]]
+            manifest = artifact["_manifest"]
+            if decision == "accepted":
+                if self.held_elsewhere(sub["project_id"], manifest):
+                    raise Problem(409, "duplicate_capture", "Another artifact holds credit for a capture.")
+                self.uncredit(manifest["id"])
+                self.record(sub, artifact, "accepted", [], self.credits_for(sub, manifest))
+            else:
+                self.record(sub, artifact, "rejected", reasons or ["maintainer_rejected"], [])
+            return public(artifact)
 
-        result = getattr(self, "op_" + op["operationId"])(req)
-        status, body, tag, extra = (result + (None, None))[:4]
-        extra = dict(extra or {})
-        if body is not None and status < 300 and tag is not False:
-            extra["ETag"] = tag or etag(body)
-        if status in (200, 201, 202) and "If-None-Match" in names and op["responses"].get("304"):
-            if headers.get("if-none-match") == extra["ETag"]:
-                return 304, None, extra
-        if slot:
-            part_id = self.participation_for(cred.account_id, params)
-            self.idempotency[slot] = {"hash": sha256(raw), "status": status, "body": body,
-                                      "headers": extra, "participation_id": part_id}
-        return status, body, extra
+    def record_retrieval(self, artifact_id: str, outcome: str, sha256_hex: str | None = None,
+                         size_bytes: int | None = None) -> dict:
+        """Report the result of fetching an externally shared file.
 
-    def participation_for(self, account_id, params):
-        """The caller's participation named by a route, for replay checks."""
-        pid = params.get("participation_id")
-        if pid and pid in self.participations:
-            return pid
-        project_id = params.get("project_id")
-        for part in self.participations.values():
-            if part["project_id"] == project_id and part["account_id"] == account_id:
-                return part["id"]
-        return None
-
-    def validate(self, schema: str, value: object) -> None:
-        errors = sorted(self.validator(schema).iter_errors(value), key=lambda e: list(e.path))
-        if errors:
-            raise Problem(422, "invalid_request", "The body does not match the schema.", [
-                {"pointer": "/" + "/".join(str(p) for p in e.absolute_path) or "/",
-                 "code": e.validator} for e in errors])
-
-    def validator(self, schema: str) -> Draft202012Validator:
-        return Draft202012Validator({"$ref": f"#/components/schemas/{schema}",
-                                     "components": self.contract["components"]},
-                                    format_checker=FormatChecker())
-
-    def check_response(self, op, status, body):
-        """Test aid: fail loudly when a response breaks the contract."""
-        response = op["responses"].get(str(status)) or op["responses"]["default"]
-        media = next(iter(response.get("content", {}).values()), None)
-        if media is None:
-            return
-        if op["operationId"] == "getCapabilities":  # Local roots use http://.
-            body = json.loads(json.dumps(body).replace('"http://', '"https://'))
-        errors = list(self.validator(media["schema"]["$ref"].split("/")[-1]).iter_errors(body))
-        if errors:
-            raise AssertionError(f"{op['operationId']} {status} breaks the contract: "
-                                 + "; ".join(f"{list(e.absolute_path)}: {e.message}" for e in errors))
-
-    # ---- Credentials and access ----------------------------------------
-
-    def authenticate(self, headers) -> Credential | None:
-        header = headers.get("authorization")
-        if header is None:
-            return None
-        scheme, _, secret = header.partition(" ")
-        if scheme.lower() != "bearer" or not secret.strip():
-            raise Problem(401, "invalid_credentials", "Send Authorization: Bearer <credential>.")
-        key = self.keys.get(sha256(secret.strip().encode()))
-        if key is None or key["revoked"] or (key["expires_at"] and parse_ts(key["expires_at"]) <= now()):
-            raise Problem(401, "invalid_credentials", "The API key is unknown, expired or revoked.")
-        projects = frozenset(key["project_ids"]) if key["project_ids"] else None
-        return Credential(key["account_id"], key["id"], key["scopes"], projects)
-
-    def alternatives(self, req: Request, context: str) -> list:
-        rules = req.op.get("x-scope-rules") or {}
-        return rules.get(context) or [req.op["x-required-scopes"]]
-
-    def account(self, req: Request) -> str:
-        """Require an API key with the operation's account scopes."""
-        cred = req.cred
-        if cred is None:
-            raise Problem(401, "authentication_required", "Send an API key.")
-        if not any(set(alt) <= cred.scopes for alt in self.alternatives(req, "account")):
-            raise Problem(403, "insufficient_scope", "The credential lacks a required scope.")
-        return cred.account_id
-
-    def scopes(self, cred: Credential, part: dict) -> set:
-        return set(cred.scopes) & ROLE_SCOPES[part["role"]]
-
-    def member(self, req: Request, project_id: str, alternatives: list | None = None) -> dict:
-        """Require active project access; return the caller's participation.
-
-        The key acts through its account's participation in the project. The
-        request may use only scopes that both the key and the role allow.
+        outcome is verified, unavailable or digest_mismatch. verified needs the
+        manifest's hash and size, then runs the normal assessment.
         """
-        cred = req.cred
-        if cred is None:
-            raise Problem(401, "authentication_required", "Send an API key.")
-        part = next((p for p in self.participations.values()
-                     if p["project_id"] == project_id and p["account_id"] == cred.account_id), None)
-        if part is None or (cred.project_ids is not None and project_id not in cred.project_ids):
-            raise Problem(404, "not_found", "No such resource.")
-        if part["state"] != "active":
-            raise Problem(403, "participation_inactive", "The participation is not active.")
-        alternatives = alternatives or self.alternatives(req, "project")
-        if not any(set(alt) <= self.scopes(cred, part) for alt in alternatives):
-            raise Problem(403, "insufficient_scope", "The credential or role lacks a required scope.")
-        return part
+        with self.lock:
+            artifact = self.artifacts[artifact_id]
+            sub = self.submissions[artifact["_submission_id"]]
+            if artifact["state"] != "awaiting_retrieval" or not sub["_finalized"]:
+                raise Problem(409, "invalid_transition", "The artifact is not finalized and awaiting retrieval.")
+            manifest = artifact["_manifest"]
+            if outcome == "verified":
+                if (sha256_hex, size_bytes) != (manifest["sha256"], manifest["size_bytes"]):
+                    raise Problem(422, "digest_mismatch", "verified requires the manifest's hash and size.")
+                artifact["state"] = "validating"
+                self.record(sub, artifact, *self.assess(sub, manifest, None))
+            else:
+                reason = "external_unavailable" if outcome == "unavailable" else "digest_mismatch"
+                self.record(sub, artifact, "rejected", [reason], [])
+            self.finish_if_done(sub)
+            return public(artifact)
 
-    def own(self, req: Request, participation_id: str) -> dict:
-        """Require that the caller acts as this participation."""
-        part = self.participations.get(participation_id)
-        if part is None or self.member(req, part["project_id"])["id"] != participation_id:
-            raise Problem(404, "not_found", "No such resource.")
-        return part
-
-    def own_account_participation(self, req: Request, participation_id: str) -> dict:
-        account_id = self.account(req)
-        part = self.participations.get(participation_id)
-        if part is None or part["account_id"] != account_id:
-            raise Problem(404, "not_found", "No such resource.")
-        return part
-
-    def visible_project(self, req: Request, project_id: str) -> dict:
-        """Public published projects are open to all; others need membership."""
-        project = self.projects.get(project_id)
-        if project is None:
-            raise Problem(404, "not_found", "No such resource.")
-        if project["visibility"] == "public" and project["current_revision"] is not None:
-            return project
-        self.member(req, project_id)
-        return project
-
-    @staticmethod
-    def precondition(req: Request, current: str | None, create_or_replace: bool = False) -> None:
-        """Check If-Match / If-None-Match against the current ETag (None if absent)."""
-        match = req.headers.get("if-match")
-        none_match = req.headers.get("if-none-match") if create_or_replace else None
-        if match and none_match:
-            raise Problem(400, "conflicting_preconditions", "Send If-Match or If-None-Match, not both.")
-        if not match and not none_match:
-            raise Problem(428, "precondition_required", "Send If-Match with the current ETag.")
-        if none_match:
-            if none_match != "*":
-                raise Problem(400, "invalid_precondition", "If-None-Match must be *.")
-            if current is not None:
-                raise Problem(412, "precondition_failed", "The resource already exists.")
-        elif current is None or match != current:
-            raise Problem(412, "precondition_failed", "The ETag is stale or the resource is missing.")
-
-    # ---- Paging and events ---------------------------------------------
-
-    def page(self, req: Request, items: list, name: str) -> dict:
-        limit = req.query.get("limit", "50")
-        if not limit.isdigit() or not 1 <= int(limit) <= 100:
-            raise Problem(400, "invalid_limit", "limit must be 1-100.")
-        start = 0
-        if "cursor" in req.query:
-            cursor = decode_cursor(req.query["cursor"])
-            if cursor.get("list") != name or not isinstance(cursor.get("offset"), int):
-                raise Problem(400, "invalid_cursor", "The cursor is not valid here.")
-            start = cursor["offset"]
-        end = start + int(limit)
-        more = end < len(items)
-        return {"items": items[start:end],
-                "next_cursor": encode_cursor({"list": name, "offset": end}) if more else None}
-
-    def emit(self, project_id: str, kind: str, resource: dict, account_id: str | None = None,
-             remove_id: str | None = None) -> int:
-        """Append to the change feed. account_id limits the event to one account."""
-        sequence = len(self.events) + 1
-        self.events.append({"sequence": sequence, "project_id": project_id, "kind": kind,
-                            "resource": resource, "account_id": account_id, "remove_id": remove_id})
-        return sequence
-
-    # ---- Capabilities and projects ---------------------------------------
-
-    def op_pairClient(self, req):
-        """Trade a single-use pairing code for a new API key."""
-        grant = self.pairing_codes.pop(sha256(req.body["pairing_code"].encode()), None)
-        if grant is None or grant["expires_at"] <= now():
-            raise Problem(401, "invalid_pairing_code", "The pairing code is unknown, used or expired.")
-        installation = req.body["installation_id"]
-        for key in self.keys.values():  # Pairing again replaces the installation's old key.
-            if key["account_id"] == grant["account_id"] and key["installation_id"] == installation:
-                key["revoked"] = True
-        secret = "acpk_" + secrets.token_urlsafe(32)
-        key = {"id": new_id(), "account_id": grant["account_id"], "scopes": grant["scopes"],
-               "client_name": req.body["client_name"], "installation_id": installation,
-               "project_ids": grant["project_ids"], "revoked": False, "expires_at": None}
-        if grant["key_ttl"]:
-            key["expires_at"] = ts(now() + timedelta(seconds=grant["key_ttl"]))
-        self.keys[sha256(secret.encode())] = key
-        body = {"key_id": key["id"], "api_key": secret, "account_id": key["account_id"],
-                "client_name": key["client_name"], "installation_id": installation,
-                "scopes": sorted(key["scopes"])}
-        if key["project_ids"]:
-            body["project_ids"] = key["project_ids"]
-        if key["expires_at"]:
-            body["expires_at"] = key["expires_at"]
-        return 201, body, False, {"Cache-Control": "no-store"}
-
-    def op_getCapabilities(self, req):
-        return 200, {
-            "server_id": self.server_id, "api_root": self.base_url + "/v1",
-            "protocol_versions": ["v1"], "spec_version": self.contract["info"]["version"],
-            "features": [], "account_url": self.base_url + "/account",
-            "artifact_formats": ["fits", "xisf"], "limits": self.limits,
-        }
+    def load_samples(self, path: Path = SAMPLE_PATH) -> list[str]:
+        """Create the sample projects in reference/sample_project.json."""
+        projects = json.loads(path.read_text(encoding="utf-8"))
+        return [self.create_project(p["requirements"], p["id"]) for p in projects]
 
     def check_requirements(self, reqs: dict) -> None:
         """Cross-reference checks that JSON Schema cannot express."""
@@ -517,492 +338,530 @@ class Api:
         if parse_ts(reqs["capture_deadline"]) > parse_ts(reqs["submission_deadline"]):
             raise Problem(422, "invalid_range", "capture_deadline must not follow submission_deadline.")
 
-    def op_listProjects(self, req):
-        account_id = self.account(req) if req.cred else None
-        mine = {p["project_id"] for p in self.participations.values() if p["account_id"] == account_id}
-        items = [public(p) for p in self.projects.values()
-                 if p["id"] in mine or (p["visibility"] == "public" and p["current_revision"])]
-        return 200, self.page(req, items, "projects")
+    # ---- Dispatch -------------------------------------------------------------
 
-    def op_createProject(self, req):
-        account_id = self.account(req)
-        body = req.body
-        if body["id"] in self.projects:
-            raise Problem(409, "already_exists", "A project with this ID exists.")
-        reqs = body["requirements"]
-        self.check_requirements(reqs)
-        stamp = ts(now())
-        project = {"id": body["id"], "owner_account_id": account_id, "title": reqs["title"],
-                   "visibility": reqs["visibility"], "state": "draft", "current_revision": None,
-                   "updated_at": stamp}
-        owner = {"id": new_id(), "project_id": body["id"], "account_id": account_id,
-                 "role": "owner", "state": "active", "revision": 1,
-                 "accepted_terms": reqs["terms"], "updated_at": stamp, "_self_paused": False}
-        self.projects[body["id"]] = project
-        self.drafts[body["id"]] = {"project_id": body["id"], "draft_revision": 1, "requirements": reqs}
-        self.revisions[body["id"]] = []
-        self.participations[owner["id"]] = owner
-        return 201, {"project": public(project), "owner_participation": public(owner)}
+    def handle(self, method: str, target: str, headers: dict, raw: bytes):
+        """Return (status, headers, body bytes) for one HTTP request."""
+        request_id = new_id()
+        headers = {k.lower(): v for k, v in headers.items()}
+        op, extra = None, {}
+        try:
+            url = urlsplit(target)
+            if not url.path.startswith("/v1/"):
+                raise Problem(404, "not_found", "No such route.")
+            path = url.path[3:]
+            matches = [(m, p, o) for m, p, o in self.routes if p.match(path)]
+            if not matches:
+                raise Problem(404, "not_found", "No such route.")
+            found = [(p, o) for m, p, o in matches if m == method]
+            if not found:
+                raise Problem(405, "method_not_allowed", "The route does not support this method.")
+            pattern, op = found[0]
+            params = pattern.match(path).groupdict()
+            for name, value in params.items():
+                if name == "part_number":
+                    if not value.isdigit() or int(value) < 1:
+                        raise Problem(404, "not_found", "No such resource.")
+                    params[name] = int(value)
+                elif not UUID_RE.match(value):
+                    raise Problem(404, "not_found", "No such resource.")
+            query = {k: v[0] for k, v in parse_qs(url.query).items()}
+            with self.lock:
+                status, body, extra = self.dispatch(op, params, query, headers, raw)
+        except Exception as error:  # A bug: answer 500 rather than drop the connection.
+            if not isinstance(error, Problem):
+                detail = f"{type(error).__name__}: {error}"[:2000] if self.check_responses \
+                    else "The server failed to handle the request."
+                error = Problem(500, "internal_error", detail)
+            status, extra = error.status, {}
+            body = {"type": "about:blank", "title": error.code.replace("_", " ").capitalize(),
+                    "status": error.status, "code": error.code, "detail": error.detail,
+                    "request_id": request_id}
+            if error.errors:
+                body["errors"] = error.errors[:100]
+        if self.check_responses and op is not None:
+            try:
+                self.check_response(op, status, body)
+            except AssertionError as error:
+                status, body = 500, {"type": "about:blank", "title": "Contract violation",
+                                     "status": 500, "code": "contract_violation",
+                                     "detail": str(error)[:2000], "request_id": request_id}
+        out = {"X-Request-Id": request_id, **extra}
+        out["Content-Type"] = "application/problem+json" if status >= 400 else "application/json"
+        return status, out, json.dumps(body, ensure_ascii=False).encode()
 
-    def op_getProject(self, req):
-        return 200, public(self.visible_project(req, req.params["project_id"]))
+    def dispatch(self, op, params, query, headers, raw):
+        cred = self.authenticate(headers)
+        if cred is None and {} not in (op.get("security") or [{"bearerAuth": []}]):
+            raise Problem(401, "authentication_required", "Send Authorization: Bearer <api key>.")
+        body = None
+        media = op.get("requestBody", {}).get("content", {})
+        kind = next((k for k in ("application/json", "application/merge-patch+json") if k in media), None)
+        if kind:
+            if len(raw) > self.limits["max_json_bytes"]:
+                raise Problem(413, "payload_too_large", "The JSON body is too large.")
+            try:
+                body = json.loads(raw or b"null")
+            except ValueError:
+                raise Problem(400, "invalid_json", "The body is not valid JSON.") from None
+            self.validate(media[kind]["schema"]["$ref"].split("/")[-1], body)
+        result = getattr(self, "op_" + op["operationId"])(Request(op, params, query, headers, body,
+                                                                   raw, cred))
+        status, body, extra = (result + ({},))[:3]
+        return status, body, extra
 
-    def op_getDraft(self, req):
-        self.member(req, req.params["project_id"])
-        return 200, self.drafts[req.params["project_id"]]
+    def validate(self, schema: str, value: object) -> None:
+        errors = sorted(self.validator(schema).iter_errors(value), key=lambda e: list(e.path))
+        if errors:
+            raise Problem(422, "invalid_request", "The body does not match the schema.", [
+                {"pointer": "/" + "/".join(str(p) for p in e.absolute_path), "code": e.validator}
+                for e in errors])
 
-    def op_replaceDraft(self, req):
-        project_id = req.params["project_id"]
-        self.member(req, project_id)
-        draft = self.drafts[project_id]
-        self.precondition(req, etag(draft))
-        self.check_requirements(req.body)
-        draft.update(draft_revision=draft["draft_revision"] + 1, requirements=req.body)
-        return 200, draft
+    def validator(self, schema: str) -> Draft202012Validator:
+        return Draft202012Validator({"$ref": f"#/components/schemas/{schema}",
+                                     "components": self.contract["components"]},
+                                    format_checker=FormatChecker())
 
-    def op_publishProject(self, req):
-        project_id = req.params["project_id"]
-        self.member(req, project_id)
-        draft = self.drafts[project_id]
-        self.precondition(req, etag(draft))
-        reqs = draft["requirements"]
-        revisions = self.revisions[project_id]
-        revision = {"project_id": project_id, "revision": len(revisions) + 1,
-                    "published_at": ts(now()), "requirements": reqs}
-        revisions.append(revision)
-        project = self.projects[project_id]
-        project.update(title=reqs["title"], visibility=reqs["visibility"], state=reqs["state"],
-                       current_revision=revision["revision"], updated_at=revision["published_at"])
-        self.emit(project_id, "project", public(project))
-        self.emit(project_id, "project_revision", revision)
-        return 201, revision
+    def check_response(self, op, status, body):
+        """Test aid: fail loudly when a response breaks the contract."""
+        response = op["responses"].get(str(status)) or op["responses"]["default"]
+        media = next(iter(response.get("content", {}).values()), None)
+        if media is None:
+            return
+        errors = list(self.validator(media["schema"]["$ref"].split("/")[-1]).iter_errors(body))
+        if errors:
+            raise AssertionError(f"{op['operationId']} {status} breaks the contract: "
+                                 + "; ".join(f"{list(e.absolute_path)}: {e.message}" for e in errors))
 
-    def revision(self, project_id: str, number: int) -> dict:
-        revisions = self.revisions.get(project_id, [])
-        if not 1 <= number <= len(revisions):
-            raise Problem(404, "not_found", "No such revision.")
-        return revisions[number - 1]
+    # ---- Keys and membership -------------------------------------------------
 
-    def current_requirements(self, project_id: str) -> dict | None:
-        revisions = self.revisions.get(project_id) or [None]
-        return revisions[-1]["requirements"] if revisions[-1] else None
+    def authenticate(self, headers) -> Credential | None:
+        header = headers.get("authorization")
+        if header is None:
+            return None
+        scheme, _, secret = header.partition(" ")
+        if scheme.lower() != "bearer" or not secret.strip():
+            raise Problem(401, "invalid_credentials", "Send Authorization: Bearer <api key>.")
+        key = self.keys.get(sha256(secret.strip().encode()))
+        if key is None or key["revoked"] or (key["expires_at"] and parse_ts(key["expires_at"]) <= now()):
+            raise Problem(401, "invalid_credentials", "The API key is unknown, expired or revoked.")
+        projects = frozenset(key["project_ids"]) if key["project_ids"] else None
+        return Credential(key["account_id"], key["id"], projects)
 
-    def op_getProjectRevision(self, req):
-        self.visible_project(req, req.params["project_id"])
-        return 200, self.revision(req.params["project_id"], req.params["revision"])
+    @staticmethod
+    def covers(cred: Credential, project_id: str) -> bool:
+        return cred.project_ids is None or project_id in cred.project_ids
 
-    def revision_list(self, req, field):
-        self.visible_project(req, req.params["project_id"])
-        number = req.query.get("revision", "")
-        if not number.isdigit():
-            raise Problem(400, "invalid_revision", "Send ?revision=<number>.")
-        items = self.revision(req.params["project_id"], int(number))["requirements"][field]
-        return 200, self.page(req, items, field)
-
-    def op_listTargets(self, req):
-        return self.revision_list(req, "targets")
-
-    def op_listObjectives(self, req):
-        return self.revision_list(req, "objectives")
-
-    # ---- Participations ------------------------------------------------------
-
-    def require_current_terms(self, project_id: str, terms: dict | None) -> None:
-        current = self.current_requirements(project_id)
-        if current and terms != current["terms"]:
-            raise Problem(409, "terms_consent_required", "Accept the current project terms first.")
-
-    def change_participation(self, part: dict, **changes) -> dict:
-        was_active = part["state"] == "active"
-        part.update(changes, revision=part["revision"] + 1, updated_at=ts(now()))
-        self.emit(part["project_id"], "participation", public(part), part["account_id"])
-        if was_active and part["state"] in INACTIVE:
-            self.emit(part["project_id"], "project_access", None, part["account_id"], part["id"])
-        return public(part)
-
-    def last_owner(self, part: dict) -> bool:
-        owners = [p for p in self.participations.values() if p["project_id"] == part["project_id"]
-                  and p["role"] == "owner" and p["state"] == "active"]
-        return owners == [part]
-
-    def op_joinProject(self, req):
-        account_id = self.account(req)
-        project_id = req.params["project_id"]
-        project = self.projects.get(project_id)
-        if project is None or (project["visibility"] != "public" and not any(
-                p["project_id"] == project_id and p["account_id"] == account_id
-                for p in self.participations.values())):
+    def member(self, req: Request, project_id: str) -> dict:
+        """Require an active membership in a project the key covers."""
+        membership = self.members.get((req.cred.account_id, project_id))
+        if membership is None or not self.covers(req.cred, project_id):
             raise Problem(404, "not_found", "No such resource.")
-        for part in self.participations.values():
-            if part["project_id"] == project_id and part["account_id"] == account_id:
-                return 201, public(part)  # One participation per account and project.
-        reqs = self.current_requirements(project_id)
-        if project["state"] != "open" or reqs is None:
-            raise Problem(409, "project_not_open", "The project is not open for enrollment.")
-        self.require_current_terms(project_id, req.body["accepted_terms"])
-        part = {"id": new_id(), "project_id": project_id, "account_id": account_id,
-                "role": "contributor",
-                "state": "active" if reqs["enrollment"] == "open" else "requested",
-                "revision": 1, "accepted_terms": req.body["accepted_terms"],
-                "updated_at": ts(now()), "_self_paused": False}
-        self.participations[part["id"]] = part
-        self.emit(project_id, "participation", public(part), account_id)
-        return 201, public(part)
+        if membership["state"] != "active":
+            raise Problem(403, "membership_inactive", "Your membership in this project is not active.")
+        return membership
 
-    def op_listProjectParticipations(self, req):
-        project_id = req.params["project_id"]
-        self.member(req, project_id)
-        items = [public(p) for p in self.participations.values() if p["project_id"] == project_id]
-        return 200, self.page(req, items, "participations")
-
-    def op_listMyParticipations(self, req):
-        account_id = self.account(req)
-        items = [public(p) for p in self.participations.values() if p["account_id"] == account_id]
-        return 200, self.page(req, items, "mine")
-
-    def op_getParticipation(self, req):
-        part = self.participations.get(req.params["participation_id"])
-        if part is None:
-            raise Problem(404, "not_found", "No such resource.")
-        if req.cred and req.cred.account_id == part["account_id"]:
-            self.account(req)
-        else:
-            self.member(req, part["project_id"], self.alternatives(req, "project"))
-        return 200, public(part)
-
-    def op_changeParticipation(self, req):
-        part = self.own_account_participation(req, req.params["participation_id"])
-        self.precondition(req, etag(public(part)))
-        action, state = req.body["action"], part["state"]
-        if action == "pause" and state == "active":
-            return 200, self.change_participation(part, state="paused", _self_paused=True)
-        if action == "resume" and state == "paused" and part["_self_paused"]:
-            return 200, self.change_participation(part, state="active", _self_paused=False)
-        if action == "withdraw" and state in ("active", "paused", "requested"):
-            if self.last_owner(part):
-                raise Problem(409, "last_owner", "The last active owner cannot leave.")
-            return 200, self.change_participation(part, state="withdrawn")
-        if action in ("rerequest", "accept_terms"):
-            self.require_current_terms(part["project_id"], req.body["accepted_terms"])
-            if action == "accept_terms" and state != "revoked":
-                return 200, self.change_participation(part, accepted_terms=req.body["accepted_terms"])
-            if action == "rerequest" and state == "withdrawn":
-                reqs = self.current_requirements(part["project_id"])
-                new = "active" if reqs and reqs["enrollment"] == "open" else "requested"
-                return 200, self.change_participation(part, state=new,
-                                                      accepted_terms=req.body["accepted_terms"])
-        raise Problem(409, "invalid_transition", f"Cannot {action} a {state} participation.")
-
-    def op_reviewParticipation(self, req):
-        part = self.participations.get(req.params["participation_id"])
-        if part is None:
-            raise Problem(404, "not_found", "No such resource.")
-        self.member(req, part["project_id"])
-        self.precondition(req, etag(public(part)))
-        action, state = req.body["action"], part["state"]
-        if action == "approve" and state == "requested":
-            return 200, self.change_participation(part, state="active")
-        if action == "revoke" and state != "revoked":
-            if self.last_owner(part):
-                raise Problem(409, "last_owner", "The last active owner cannot be revoked.")
-            return 200, self.change_participation(part, state="revoked", _self_paused=False)
-        if action == "restore_request" and state == "revoked":
-            return 200, self.change_participation(part, state="requested")
-        raise Problem(409, "invalid_transition", f"Cannot {action} a {state} participation.")
-
-    # ---- Offers, planning, intent and status ------------------------------
-
-    def advice(self) -> dict:
-        # This server has no recommendation engine; clients plan locally.
-        return {"action": "unavailable", "demand_sequence": len(self.events),
-                "next_checkin_seconds": 3600, "reason_codes": ["recommendations_unsupported"]}
-
-    def put_revision(self, req, history: list, make) -> dict:
-        """Create-or-replace with revision history. make(revision) builds the record."""
-        self.precondition(req, etag(history[-1]) if history else None, create_or_replace=True)
-        record = make(len(history) + 1)
-        history.append(record)
-        return record
-
-    def get_revision(self, history: list | None, number: int | None = None) -> dict:
-        if not history:
-            raise Problem(404, "not_found", "No such resource.")
-        if number is None:
-            return history[-1]
-        if not 1 <= number <= len(history):
-            raise Problem(404, "not_found", "No such revision.")
-        return history[number - 1]
-
-    def check_equipment_refs(self, pid: str, refs: list) -> None:
-        for ref in refs:
-            history = self.equipment.get((pid, ref["equipment_id"])) or []
-            if not 1 <= ref["revision"] <= len(history):
-                raise Problem(422, "invalid_reference", "An equipment reference does not exist.")
-
-    def op_registerEquipment(self, req):
-        pid, eid = req.params["participation_id"], req.params["equipment_id"]
-        self.own(req, pid)
-        if any(key[1] == eid and key[0] != pid for key in self.equipment):
-            raise Problem(409, "id_conflict", "Another participation uses this equipment ID.")
-        filters = [f["id"] for f in req.body["filters"]]
-        if len(set(filters)) != len(filters):
-            raise Problem(422, "duplicate_id", "Filter IDs must be unique.")
-        history = self.equipment.setdefault((pid, eid), [])
-        record = self.put_revision(req, history, lambda n: {
-            "id": eid, "participation_id": pid, "revision": n, "observed_at": ts(now()),
-            "configuration": req.body})
-        return 200, {"equipment": record, "advice": self.advice()}, etag(record)
-
-    def op_getEquipment(self, req):
-        pid = req.params["participation_id"]
-        self.own(req, pid)
-        return 200, self.get_revision(self.equipment.get((pid, req.params["equipment_id"])))
-
-    def op_getEquipmentRevision(self, req):
-        pid = req.params["participation_id"]
-        self.own(req, pid)
-        return 200, self.get_revision(self.equipment.get((pid, req.params["equipment_id"])),
-                                      req.params["revision"])
-
-    def op_setCapacity(self, req):
-        pid = req.params["participation_id"]
-        self.own(req, pid)
-        offer = req.body
-        if any((pid, eid) not in self.equipment for eid in offer["equipment_ids"]):
-            raise Problem(422, "invalid_reference", "Capacity names unknown equipment.")
-        if any(parse_ts(a["start"]) >= parse_ts(a["end"]) for a in offer["availability"]):
-            raise Problem(422, "invalid_range", "Each availability interval must end after it starts.")
-        history = self.capacity.setdefault(pid, [])
-        return 200, self.put_revision(req, history, lambda n: {
-            "participation_id": pid, "revision": n, "offer": offer})
-
-    def op_getCapacity(self, req):
-        self.own(req, req.params["participation_id"])
-        return 200, self.get_revision(self.capacity.get(req.params["participation_id"]))
-
-    def op_getCapacityRevision(self, req):
-        self.own(req, req.params["participation_id"])
-        return 200, self.get_revision(self.capacity.get(req.params["participation_id"]),
-                                      req.params["revision"])
-
-    def op_setPlanningPolicy(self, req):
-        pid = req.params["participation_id"]
-        part = self.own(req, pid)
-        self.check_equipment_refs(pid, req.body["equipment"])
-        reqs = self.current_requirements(part["project_id"])
-        targets = {t["id"] for t in reqs["targets"]} if reqs else set()
-        if any(r["target_id"] not in targets for r in req.body["allowed_regions"]):
-            raise Problem(422, "invalid_reference", "An allowed region names an unknown target.")
-        history = self.policies.setdefault(pid, [])
-        return 200, self.put_revision(req, history, lambda n: {
-            "participation_id": pid, "revision": n, "policy": req.body})
-
-    def op_getPlanningPolicy(self, req):
-        self.own(req, req.params["participation_id"])
-        return 200, self.get_revision(self.policies.get(req.params["participation_id"]))
-
-    def op_getPlanningPolicyRevision(self, req):
-        self.own(req, req.params["participation_id"])
-        return 200, self.get_revision(self.policies.get(req.params["participation_id"]),
-                                      req.params["revision"])
-
-    def op_checkIn(self, req):
-        pid = req.params["participation_id"]
-        self.own(req, pid)
-        body = req.body
-        self.check_equipment_refs(pid, body["equipment"])
-        self.get_revision(self.capacity.get(pid), body["capacity_revision"])
-        self.get_revision(self.policies.get(pid), body["planning_policy_revision"])
-        return 200, self.advice()
-
-    def op_requestRecommendation(self, req):
-        self.member(req, req.params["project_id"])
-        raise Problem(404, "unsupported_feature", "This server does not offer recommendations.")
-
-    def op_setIntent(self, req):
-        pid, intent_id = req.params["participation_id"], req.params["intent_id"]
-        part = self.own(req, pid)
-        body = req.body
-        reqs = self.revision(part["project_id"], body["project_revision"])["requirements"]
-        objectives = {o["id"] for o in reqs["objectives"]}
-        for panel in body["panels"]:
-            if not set(panel["objective_ids"]) <= objectives:
-                raise Problem(422, "invalid_reference", "A panel names an unknown objective.")
-            self.check_equipment_refs(pid, [panel["equipment"]])
-        history = self.intents.setdefault((pid, intent_id), [])
-        return 200, self.put_revision(req, history, lambda n: {
-            "id": intent_id, "participation_id": pid, "revision": n, "intent": body})
-
-    def op_getIntent(self, req):
-        pid = req.params["participation_id"]
-        self.own(req, pid)
-        return 200, self.get_revision(self.intents.get((pid, req.params["intent_id"])))
-
-    def op_reportStatus(self, req):
-        pid, writer = req.params["participation_id"], req.params["writer_id"]
-        self.own(req, pid)
-        current = self.status.get((pid, writer))
-        if current and current["_client_id"] != req.cred.client_id:
-            raise Problem(409, "writer_conflict", "Another client owns this writer ID.")
-        sequence = req.body["sequence"]
-        if current and sequence < current["last_sequence"]:
-            return 200, {**current["receipt"], "applied": False}
-        if current and sequence == current["last_sequence"]:
-            if current["status"] != req.body:
-                raise Problem(409, "status_conflict", "This sequence was sent with different content.")
-            return 200, current["receipt"]
-        receipt = {"writer_id": writer, "applied": True, "last_sequence": sequence,
-                   "received_at": ts(now())}
-        self.status[(pid, writer)] = {"_client_id": req.cred.client_id, "status": req.body,
-                                      "last_sequence": sequence, "receipt": receipt}
-        return 200, receipt
-
-    def op_listActivity(self, req):
-        project_id = req.params["project_id"]
-        mine = self.member(req, project_id)
-        items = []
-        for (pid, writer), entry in self.status.items():
-            part = self.participations[pid]
-            shared = entry["status"]["visibility"] == "project" and part["state"] == "active"
-            if part["project_id"] == project_id and (pid == mine["id"] or shared):
-                items.append({"participation_id": pid, "writer_id": writer, "status": entry["status"],
-                              "received_at": entry["receipt"]["received_at"],
-                              "stale": parse_ts(entry["status"]["expires_at"]) <= now()})
-        return 200, self.page(req, items, "activity")
-
-    # ---- Progress ----------------------------------------------------------
-
-    def progress(self, project_id: str) -> dict:
-        reqs = self.current_requirements(project_id)
-        if reqs is None:
-            raise Problem(404, "not_found", "The project has no published revision.")
-        stamp = now()
-        objectives = []
-        for objective in reqs["objectives"]:
-            oid = objective["id"]
-            credits = [c for k, c in self.credits.items() if k[0] == project_id and k[1] == oid]
-            accepted = [c for c in credits if not c["surplus"]]
-            intended = sum(panel["suggested_frames"]
-                           for (pid, _), history in self.intents.items()
-                           if self.participations[pid]["project_id"] == project_id
-                           for intent in [history[-1]["intent"]]
-                           if intent["state"] == "active" and parse_ts(intent["expires_at"]) > stamp
-                           for panel in intent["panels"] if oid in panel["objective_ids"])
-            reported = sum(entry["status"]["captured_reported_frames"]
-                           for (pid, _), entry in self.status.items()
-                           if self.participations[pid]["project_id"] == project_id
-                           and entry["status"].get("objective_id") == oid)
-            artifacts = [a for a in self.artifacts.values()
-                         if a["_project_id"] == project_id and oid in a["_manifest"]["objective_ids"]]
-            frames = len(accepted)
-            seconds = sum(c["seconds"] for c in accepted)
-            goal = objective["goal"]
-            objectives.append({
-                "objective_id": oid, "goal": goal, "intended_frames": intended,
-                "captured_reported_frames": reported,
-                "received_pending_frames": sum(a["state"] in ("received", "validating") for a in artifacts),
-                "accepted_frames": frames, "accepted_integration_seconds": seconds,
-                "rejected_frames": sum(a["state"] == "rejected" for a in artifacts),
-                "surplus_frames": len(credits) - frames,
-                "complete": frames >= goal.get("accepted_frames", 0)
-                and seconds >= goal.get("accepted_integration_seconds", 0),
-            })
-        captures = {}
-        for (pid, _, origin, capture), credit in self.credits.items():
-            if pid == project_id and not credit["surplus"]:
-                captures[(origin, capture)] = credit["seconds"]
-        return {"project_id": project_id,
-                "project_revision": self.projects[project_id]["current_revision"],
-                "event_sequence": len(self.events), "as_of": ts(stamp), "objectives": objectives,
-                "distinct_credited_captures": len(captures),
-                "distinct_credited_integration_seconds": sum(captures.values())}
-
-    def op_getProgress(self, req):
-        self.visible_project(req, req.params["project_id"])
-        return 200, self.progress(req.params["project_id"])
-
-    # ---- Sync ----------------------------------------------------------------
-
-    def active_part(self, account_id: str, project_id: str) -> dict | None:
-        return next((p for p in self.participations.values() if p["project_id"] == project_id
-                     and p["account_id"] == account_id and p["state"] == "active"), None)
-
-    def op_createSnapshot(self, req):
-        account_id = self.account(req)
-        project_ids = sorted(set(req.body["project_ids"]))
-        items = []
-        for project_id in project_ids:
-            part = self.active_part(account_id, project_id)
-            if part is None:
-                raise Problem(404, "not_found", "No such resource.")
-            items.append({"kind": "project", "resource": public(self.projects[project_id])})
-            if self.revisions[project_id]:
-                items.append({"kind": "project_revision", "resource": self.revisions[project_id][-1]})
-                items.append({"kind": "progress", "resource": self.progress(project_id)})
-            items.append({"kind": "participation", "resource": public(part)})
-            items += [{"kind": "assessment", "resource": a} for a in self.assessments.values()
-                      if a["participation_id"] == part["id"]]
-        snapshot = {"id": new_id(), "account_id": account_id, "client_id": req.cred.client_id,
-                    "project_ids": project_ids, "items": items, "sequence": len(self.events),
-                    "expires_at": ts(now() + timedelta(seconds=self.limits["snapshot_ttl_seconds"]))}
-        self.snapshots[snapshot["id"]] = snapshot
-        return 201, self.snapshot_page(snapshot, 0)
-
-    def snapshot_page(self, snapshot: dict, start: int) -> dict:
-        end = start + PAGE_SIZE
-        page = {"snapshot_id": snapshot["id"], "expires_at": snapshot["expires_at"],
-                "items": snapshot["items"][start:end], "next_page_cursor": None}
-        if end < len(snapshot["items"]):
-            page["next_page_cursor"] = encode_cursor({"snapshot": snapshot["id"], "offset": end})
-        else:
-            page["changes_cursor"] = encode_cursor({
-                "account": snapshot["account_id"], "client": snapshot["client_id"],
-                "projects": snapshot["project_ids"], "sequence": snapshot["sequence"]})
-        return page
-
-    def op_getSnapshotPage(self, req):
-        account_id = self.account(req)
-        snapshot = self.snapshots.get(req.params["snapshot_id"])
-        if snapshot is None or snapshot["account_id"] != account_id \
-                or snapshot["client_id"] != req.cred.client_id:
-            raise Problem(404, "not_found", "No such snapshot.")
-        if parse_ts(snapshot["expires_at"]) <= now():
-            raise Problem(410, "snapshot_expired", "Start a new snapshot.")
-        if any(self.active_part(account_id, p) is None for p in snapshot["project_ids"]):
-            raise Problem(409, "snapshot_invalidated", "Project access changed; start a new snapshot.")
+    def page(self, req: Request, items: list, name: str) -> dict:
+        limit = req.query.get("limit", "50")
+        if not limit.isdigit() or not 1 <= int(limit) <= 100:
+            raise Problem(400, "invalid_limit", "limit must be 1-100.")
         start = 0
         if "cursor" in req.query:
             cursor = decode_cursor(req.query["cursor"])
-            if cursor.get("snapshot") != snapshot["id"]:
-                raise Problem(400, "invalid_cursor", "The cursor belongs to another snapshot.")
+            if cursor.get("list") != name or not isinstance(cursor.get("offset"), int):
+                raise Problem(400, "invalid_cursor", "The cursor is not valid here.")
             start = cursor["offset"]
-        return 200, self.snapshot_page(snapshot, start)
+        end = start + int(limit)
+        more = end < len(items)
+        return {"items": items[start:end],
+                "next_cursor": encode_cursor({"list": name, "offset": end}) if more else None}
 
-    def op_getChanges(self, req):
-        account_id = self.account(req)
-        cursor = decode_cursor(req.query["cursor"])
-        if cursor.get("account") != account_id or cursor.get("client") != req.cred.client_id:
-            raise Problem(400, "invalid_cursor", "The cursor belongs to another client.")
-        limit = int(req.query.get("limit", "50"))
-        projects, items, last = set(cursor["projects"]), [], cursor["sequence"]
-        for event in self.events[cursor["sequence"]:]:
-            if len(items) >= limit:
+    # ---- Discovery, pairing and projects ----------------------------------------
+
+    def op_getCapabilities(self, req):
+        return 200, {
+            "server_id": self.server_id, "api_root": self.base_url + "/v1",
+            "protocol_versions": ["v1"], "spec_version": self.contract["info"]["version"],
+            "features": [], "account_url": self.base_url + "/account",
+            "artifact_formats": ["fits", "xisf"], "limits": self.limits,
+        }
+
+    def op_pairClient(self, req):
+        """Trade a single-use pairing code for a new API key."""
+        grant = self.pairing_codes.pop(sha256(req.body["pairing_code"].encode()), None)
+        if grant is None or grant["expires_at"] <= now():
+            raise Problem(401, "invalid_pairing_code", "The pairing code is unknown, used or expired.")
+        installation = req.body["installation_id"]
+        for key in self.keys.values():  # Pairing again replaces the installation's old key.
+            if key["account_id"] == grant["account_id"] and key["installation_id"] == installation:
+                key["revoked"] = True
+        secret = "acpk_" + secrets.token_urlsafe(32)
+        key = {"id": new_id(), "account_id": grant["account_id"], "client_name": req.body["client_name"],
+               "installation_id": installation, "project_ids": grant["project_ids"], "revoked": False,
+               "expires_at": ts(now() + timedelta(seconds=grant["key_ttl"])) if grant["key_ttl"] else None}
+        self.keys[sha256(secret.encode())] = key
+        body = {"key_id": key["id"], "api_key": secret, "account_id": key["account_id"],
+                "client_name": key["client_name"], "installation_id": installation}
+        for field in ("project_ids", "expires_at"):
+            if key[field]:
+                body[field] = key[field]
+        if grant["equipment_id"]:
+            body["equipment_id"] = grant["equipment_id"]
+        return 201, body, {"Cache-Control": "no-store"}
+
+    def requirements(self, project_id: str, revision: int | None = None) -> dict:
+        revisions = self.projects[project_id]["revisions"]
+        if revision is None:
+            return revisions[-1]["requirements"]
+        if not 1 <= revision <= len(revisions):
+            raise Problem(422, "invalid_revision", "No such project revision.")
+        return revisions[revision - 1]["requirements"]
+
+    def project_view(self, project_id: str) -> dict:
+        project = self.projects[project_id]
+        latest = project["revisions"][-1]
+        return {"id": project_id, "title": latest["requirements"]["title"], "state": project["state"],
+                "revision": len(project["revisions"]), "published_at": latest["published_at"],
+                "requirements": latest["requirements"]}
+
+    def op_listMyProjects(self, req):
+        items = []
+        for (account_id, project_id), membership in self.members.items():
+            if account_id == req.cred.account_id and self.covers(req.cred, project_id):
+                view = self.project_view(project_id)
+                items.append({"project_id": project_id, "title": view["title"], "state": view["state"],
+                              "membership": membership["state"]})
+        return 200, self.page(req, items, "projects")
+
+    def op_getProject(self, req):
+        if req.params["project_id"] not in self.projects:
+            raise Problem(404, "not_found", "No such project.")
+        return 200, self.project_view(req.params["project_id"])
+
+    # ---- Rigs ------------------------------------------------------------------
+
+    def rig(self, account_id: str, equipment_id: str) -> dict:
+        history = self.equipment.get((account_id, equipment_id))
+        if not history:
+            raise Problem(404, "not_found", "No such rig.")
+        return history[-1]
+
+    def save_rig(self, account_id: str, eid: str, config: dict) -> dict:
+        if any(key[1] == eid and key[0] != account_id for key in self.equipment):
+            raise Problem(409, "id_conflict", "Another account uses this equipment ID.")
+        filters = [f["id"] for f in config.get("filters", [])]
+        if len(set(filters)) != len(filters):
+            raise Problem(422, "duplicate_id", "Filter IDs must be unique.")
+        history = self.equipment.setdefault((account_id, eid), [])
+        if history and history[-1]["configuration"] == config:
+            return history[-1]  # No change keeps the revision.
+        record = {"id": eid, "account_id": account_id, "revision": len(history) + 1,
+                  "observed_at": ts(now()), "configuration": config}
+        history.append(record)
+        return record
+
+    def op_registerEquipment(self, req):
+        return 200, self.save_rig(req.cred.account_id, req.params["equipment_id"], req.body)
+
+    def op_updateEquipment(self, req):
+        """Apply a JSON merge patch (RFC 7396)."""
+        current = self.rig(req.cred.account_id, req.params["equipment_id"])["configuration"]
+        merged = merge_patch(current, req.body)
+        self.validate("EquipmentInput", merged)
+        return 200, self.save_rig(req.cred.account_id, req.params["equipment_id"], merged)
+
+    def op_getEquipment(self, req):
+        return 200, self.rig(req.cred.account_id, req.params["equipment_id"])
+
+    def op_listEquipment(self, req):
+        items = [history[-1] for (owner, _), history in self.equipment.items()
+                 if owner == req.cred.account_id]
+        return 200, self.page(req, items, "equipment")
+
+    # ---- Check-in and assignment ---------------------------------------------------
+    # reference/planning.py holds the framing rules. These methods gather the
+    # inputs, keep the shared panel layouts and track depth per panel.
+
+    def op_checkIn(self, req):
+        """One rig asks for work. The server picks the project and the panel.
+
+        Repeating a check-in changes nothing: unsubmitted_captures is a total
+        that replaces the rig's last report, and unchanged work comes back as
+        the same assignment.
+        """
+        body = req.body
+        eid = body["equipment_id"]
+        equipment = self.rig(req.cred.account_id, eid)
+        if "unsubmitted_captures" in body:
+            self.reported[eid] = [entry for entry in body["unsubmitted_captures"]
+                                  if entry["panel_id"] in self.panels]
+
+        if planning.missing(equipment["configuration"]):
+            return 200, {"action": "wait", "next_checkin_seconds": 3600, "reason_codes": ["rig_incomplete"]}
+        wanted = set(body.get("project_ids") or [])
+        projects = [project_id for (account_id, project_id), m in self.members.items()
+                    if account_id == req.cred.account_id and m["state"] == "active"
+                    and self.covers(req.cred, project_id) and (not wanted or project_id in wanted)]
+        if not projects:
+            return 200, {"action": "wait", "next_checkin_seconds": 3600, "reason_codes": ["no_active_projects"]}
+
+        reasons, best = [], None
+        for project_id in projects:
+            outcome = self.plan(project_id, eid, equipment)
+            if isinstance(outcome, list):
+                reasons += outcome
+            elif best is None or outcome[0] > best[0]:
+                best = outcome
+        if best is None:
+            return 200, {"action": "wait", "next_checkin_seconds": 3600, "reason_codes": sorted(set(reasons))}
+        assignment = best[1]
+        previous = self.assignments.get(self.latest.get(eid, ""))
+        if previous and parse_ts(previous["expires_at"]) > now() and self.same_work(previous, assignment):
+            if body.get("assignment_id") == previous["id"]:
+                return 200, {"action": "continue", "next_checkin_seconds": 1800, "reason_codes": []}
+            assignment = previous  # Same work as last time: the same assignment.
+        self.assignments[assignment["id"]] = assignment
+        self.latest[eid] = assignment["id"]
+        return 200, {"action": "image", "next_checkin_seconds": 1800, "reason_codes": [],
+                     "assignment": public(assignment)}
+
+    @staticmethod
+    def same_work(a: dict, b: dict) -> bool:
+        def shape(assignment):
+            return [(p["id"], p["filter_id"], p["equipment"], p["exposure_seconds"])
+                    for p in assignment["panels"]]
+        return (a["project_id"], a["project_revision"], shape(a)) == \
+            (b["project_id"], b["project_revision"], shape(b))
+
+    def depth(self, project_id: str, objective_id: str, panel_id: str | None) -> tuple:
+        """Accepted (frames, seconds) for an objective on one panel (None: no panel)."""
+        credits = [c for k, c in self.credits.items() if k[:2] == (project_id, objective_id)
+                   and not c["surplus"] and c["panel_id"] == panel_id]
+        return sum(c["frames"] for c in credits), sum(c["seconds"] for c in credits)
+
+    def panel_deficit(self, project_id: str, objective: dict, panel_id: str | None) -> float:
+        """Seconds of accepted integration a panel still needs. Each panel needs the full goal."""
+        frames, seconds = self.depth(project_id, objective["id"], panel_id)
+        goal = objective["goal"]
+        return max(goal.get("accepted_integration_seconds", 0) - seconds,
+                   (goal.get("accepted_frames", 0) - frames) * objective["exposure"]["min_seconds"], 0)
+
+    def objective_complete(self, project_id: str, objective: dict) -> bool:
+        """Complete when every panel of some layout over the target has the full goal.
+        Before any layout exists, frames without a panel stand for the whole target."""
+        layouts = self.layouts.get((project_id, objective["target_id"]), [])
+        if not layouts:
+            return self.panel_deficit(project_id, objective, None) <= 0
+        return any(all(self.panel_deficit(project_id, objective, cell["id"]) <= 0
+                       for cell in grid["panels"]) for grid in layouts)
+
+    def deficits(self, project_id: str, requirements: dict) -> dict:
+        """Per objective, the seconds its neediest panel still needs (0 when complete)."""
+        out = {}
+        for objective in requirements["objectives"]:
+            layouts = self.layouts.get((project_id, objective["target_id"]), [])
+            if self.objective_complete(project_id, objective):
+                out[objective["id"]] = 0
+            elif not layouts:
+                out[objective["id"]] = self.panel_deficit(project_id, objective, None)
+            else:
+                out[objective["id"]] = max(self.panel_deficit(project_id, objective, cell["id"])
+                                           for grid in layouts for cell in grid["panels"])
+        return out
+
+    def plan(self, project_id: str, eid: str, equipment: dict):
+        """Plan one rig for one project. Returns (deficit, assignment) or reason codes."""
+        if self.projects[project_id]["state"] != "open":
+            return ["project_not_open"]
+        requirements = self.requirements(project_id)
+        if now() >= parse_ts(requirements["capture_deadline"]):
+            return ["project_closed"]
+        config = with_defaults(equipment["configuration"])
+        deficits = self.deficits(project_id, requirements)
+        choices, why = planning.candidates(config, requirements, deficits)
+        if not choices:
+            return why
+        deficit, objective, chosen_filter = choices[0]
+        return deficit, self.assignment(project_id, requirements, eid, equipment, objective,
+                                        chosen_filter, deficits)
+
+    def camera_angle(self, config: dict, target: dict) -> float:
+        """Fixed cameras keep their confirmed angle; others turn to the target's."""
+        if config["rotation"] == "fixed":
+            return config["confirmed_position_angle_degrees"]
+        return target["footprint"]["position_angle_degrees"]
+
+    def layout_for(self, project_id: str, target: dict, fov, angle: float) -> dict:
+        """The shared panel grid this rig works on.
+
+        Among the target's layouts at this camera angle, pick the one with the
+        largest panels that still fit the rig's field. If none fits, lay a new
+        grid sized to this rig. A rig never gets a panel larger than its field.
+        """
+        layouts = self.layouts.setdefault((project_id, target["id"]), [])
+        fitting = [g for g in layouts if planning.angle_difference(g["angle"], angle) <= 1
+                   and g["fov"][0] <= fov[0] * 1.001 and g["fov"][1] <= fov[1] * 1.001]
+        if fitting:
+            return max(fitting, key=lambda g: g["fov"][0] * g["fov"][1])
+        # Cover the target as the camera sees it: its bounding box at this angle.
+        footprint = target["footprint"]
+        turn = math.radians(footprint["position_angle_degrees"] - angle)
+        width, height = footprint["width_degrees"], footprint["height_degrees"]
+        area = {"center": footprint["center"], "position_angle_degrees": angle,
+                "width_degrees": width * abs(math.cos(turn)) + height * abs(math.sin(turn)),
+                "height_degrees": width * abs(math.sin(turn)) + height * abs(math.cos(turn))}
+        columns, rows = planning.layout(area, fov)
+        centers = planning.panel_centers(area, fov, columns, rows)
+        grid = {"columns": columns, "rows": rows, "fov": fov, "angle": angle, "panels": [
+            {"id": new_id(), "center": center, "column": i % columns + 1, "row": i // columns + 1}
+            for i, center in enumerate(centers)]}
+        for cell in grid["panels"]:
+            self.panels[cell["id"]] = {"project_id": project_id, "target_id": target["id"], "footprint": {
+                "center": cell["center"], "width_degrees": fov[0], "height_degrees": fov[1],
+                "position_angle_degrees": angle}}
+        layouts.append(grid)
+        return grid
+
+    def reported_frames(self, panel_id: str, exclude: str | None = None) -> int:
+        """Frames rigs (other than exclude) report captured for a panel but not yet
+        submitted. Reports stop counting after the project's submission deadline."""
+        project_id = self.panels[panel_id]["project_id"]
+        if now() >= parse_ts(self.requirements(project_id)["submission_deadline"]):
+            return 0
+        return sum(entry["frames"] for rig_id, report in self.reported.items() if rig_id != exclude
+                   for entry in report if entry["panel_id"] == panel_id)
+
+    def settle_reports(self, manifest: dict) -> None:
+        """Submitted frames are no longer unsubmitted: take them off the rig's report."""
+        for artifact in manifest["artifacts"]:
+            report = self.reported.get(artifact["equipment"]["equipment_id"], [])
+            for entry in report:
+                if entry["panel_id"] == artifact.get("panel_id"):
+                    entry["frames"] = max(0, entry["frames"] - frames_in(artifact))
+            self.reported[artifact["equipment"]["equipment_id"]] = [e for e in report if e["frames"] > 0]
+
+    def planned_by_others(self, panel_id: str, eid: str) -> int:
+        """Frames other rigs' live assignments suggest for a panel."""
+        stamp, planned = now(), 0
+        for rig_id, assignment_id in self.latest.items():
+            assignment = self.assignments[assignment_id]
+            if rig_id != eid and parse_ts(assignment["expires_at"]) > stamp:
+                planned += sum(p["suggested_frames"] for p in assignment["panels"] if p["id"] == panel_id)
+        return planned
+
+    def assignment(self, project_id, requirements, eid, equipment, objective, chosen_filter, deficits):
+        config = with_defaults(equipment["configuration"])
+        target = next(t for t in requirements["targets"] if t["id"] == objective["target_id"])
+        footprint = target["footprint"]
+        fov = planning.field_of_view(config)
+        angle = self.camera_angle(config, target)
+        grid = self.layout_for(project_id, target, fov, angle)
+        count = grid["columns"] * grid["rows"]
+        notes = []
+        if count == 1 and footprint["width_degrees"] < planning.SMALL_TARGET * fov[0]:
+            notes.append(f"The target is small in this field "
+                         f"({footprint['width_degrees'] * 60:.2g}′ in {fov[0]:.2g}°).")
+        elif count == 1:
+            notes.append("The whole target fits in one field.")
+        else:
+            notes.append(f"Part of a shared {grid['columns']}×{grid['rows']} mosaic; "
+                         f"each panel needs the full goal.")
+
+        exposure = objective["exposure"]["min_seconds"]
+
+        # Each panel needs the full goal. Rank panels by the frames they still
+        # need after other rigs' live assignments; the neediest comes first.
+        def need(cell):
+            seconds = self.panel_deficit(project_id, objective, cell["id"])
+            return math.ceil(seconds / (exposure * planning.PASS_RATE)) - \
+                self.planned_by_others(cell["id"], eid) - self.reported_frames(cell["id"], eid)
+
+        ranked = sorted(((need(cell), cell) for cell in grid["panels"]), key=lambda nc: -nc[0])
+
+        # One panel; add the next only while the work still fits in one night.
+        night = int(planning.NIGHT_SECONDS // (exposure * planning.OVERHEAD))
+        chosen, total = [], 0
+        for frames, cell in ranked:
+            if frames < 1 or len(chosen) >= planning.MAX_PLAN_PANELS or (chosen and total >= night):
                 break
-            last = event["sequence"]
-            if event["project_id"] not in projects:
-                continue
-            if event["account_id"] not in (None, account_id):
-                continue
-            if event["kind"] == "project_access":
-                items.append({"sequence": last, "operation": "remove", "kind": "project_access",
-                              "project_id": event["project_id"], "resource_id": event["remove_id"]})
-            elif self.active_part(account_id, event["project_id"]):
-                items.append({"sequence": last, "operation": "upsert",
-                              "entry": {"kind": event["kind"], "resource": event["resource"]}})
-        return 200, {"items": items, "next_cursor": encode_cursor({**cursor, "sequence": last}),
-                     "poll_after_seconds": 30}
+            chosen.append((cell, frames))
+            total += frames
+        if not chosen:  # Other rigs already cover every panel; share the neediest.
+            chosen, total = [(ranked[0][1], night)], night
+        if len(chosen) > 1:
+            notes.append("Image the panels in order; move on when one is done.")
+        served = [oid for oid in objectives_served(requirements, objective, chosen_filter["bandpasses"],
+                                                    exposure) if deficits[oid] > 0]
+        if len(served) > 1:
+            notes.append("These frames serve several objectives through this filter's passbands.")
+        for cell, _ in chosen:
+            self.panel_objectives[cell["id"]] = served
+        stamp = now()
+        return {
+            "id": new_id(), "project_id": project_id,
+            "project_revision": len(self.projects[project_id]["revisions"]),
+            "created_at": ts(stamp), "expires_at": ts(stamp + timedelta(days=1)),
+            "panels": [{
+                "id": cell["id"], "target_id": target["id"], "target_name": target["name"],
+                "objective_ids": served,
+                "footprint": {"center": cell["center"], "width_degrees": round(grid["fov"][0], 4),
+                              "height_degrees": round(grid["fov"][1], 4), "position_angle_degrees": angle},
+                "layout": {"columns": grid["columns"], "rows": grid["rows"],
+                           "column": cell["column"], "row": cell["row"]},
+                "overlap_fraction": planning.OVERLAP if count > 1 else 0,
+                "equipment": {"equipment_id": eid, "revision": equipment["revision"]},
+                "filter_id": chosen_filter["id"], "exposure_seconds": exposure,
+                "suggested_frames": frames,
+            } for cell, frames in chosen],
+            "estimated_rig_seconds": total * exposure * planning.OVERHEAD,
+            "estimated_accepted_integration_seconds": total * exposure * planning.PASS_RATE,
+            "notes": notes, "_equipment_id": eid,
+        }
 
-    # ---- Submissions and uploads ----------------------------------------------
+    # ---- Progress ----------------------------------------------------------------
+
+    def op_getProgress(self, req):
+        project_id = req.params["project_id"]
+        if project_id not in self.projects:
+            raise Problem(404, "not_found", "No such project.")
+        requirements = self.requirements(project_id)
+        stamp = now()
+        live = [self.assignments[a] for a in self.latest.values()]
+        live = [a for a in live if a["project_id"] == project_id and parse_ts(a["expires_at"]) > stamp]
+        objectives = []
+        for objective in requirements["objectives"]:
+            oid = objective["id"]
+            credits = [c for k, c in self.credits.items() if k[:2] == (project_id, oid)]
+            accepted = [c for c in credits if not c["surplus"]]
+            artifacts = [a for a in self.artifacts.values()
+                         if a["_project_id"] == project_id and oid in a["_manifest"]["objective_ids"]]
+            objectives.append({
+                "objective_id": oid, "goal": objective["goal"],
+                "assigned_frames": sum(p["suggested_frames"] for a in live for p in a["panels"]
+                                       if oid in p["objective_ids"]),
+                "reported_frames": sum(self.reported_frames(panel_id)
+                                       for panel_id, served in self.panel_objectives.items()
+                                       if oid in served and self.panels[panel_id]["project_id"] == project_id),
+                "pending_frames": sum(frames_in(a["_manifest"]) for a in artifacts if a["state"] in
+                                      ("uploading", "awaiting_retrieval", "received", "validating")),
+                "accepted_frames": sum(c["frames"] for c in accepted),
+                "accepted_integration_seconds": sum(c["seconds"] for c in accepted),
+                "rejected_frames": sum(frames_in(a["_manifest"]) for a in artifacts
+                                       if a["state"] == "rejected"),
+                "surplus_frames": sum(frames_in(self.artifacts[c["artifact_id"]]["_manifest"])
+                                      for c in credits if c["surplus"]),
+                "complete": self.objective_complete(project_id, objective),
+            })
+        captures = {}  # Each credited capture counts once, however many objectives it serves.
+        for (pid, _, _), credit in self.credits.items():
+            if pid == project_id and not credit["surplus"]:
+                for capture in credit["captures"]:
+                    captures[capture] = credit["seconds_each"]
+        return 200, {"project_id": project_id, "revision": len(self.projects[project_id]["revisions"]),
+                     "as_of": ts(stamp), "objectives": objectives, "accepted_frames": len(captures),
+                     "accepted_integration_seconds": sum(captures.values())}
+
+    # ---- Submissions and uploads ----------------------------------------------------
 
     def submission_view(self, sub: dict) -> dict:
         view = public(sub)
@@ -1016,59 +875,91 @@ class Api:
         view["received_parts"] = [upload["_parts"][n]["receipt"] for n in sorted(upload["_parts"])]
         return view
 
+    def check_artifact(self, reqs: dict, artifact: dict, account_id: str) -> None:
+        """Checks for one manifest entry that JSON Schema cannot express."""
+        kind = artifact.get("kind", "calibrated_sub")
+        wanted = "stacked_master" if reqs["deliverable"] == "stacked_masters" else "calibrated_sub"
+        if kind != wanted:
+            raise Problem(422, "deliverable_mismatch", f"This project accepts {reqs['deliverable']}.")
+        objectives = {o["id"] for o in reqs["objectives"]}
+        groups = {g["id"] for g in reqs["processing_groups"]}
+        if not set(artifact["objective_ids"]) <= objectives \
+                or artifact["processing_group_id"] not in groups:
+            raise Problem(422, "invalid_reference", "An artifact names an unknown objective or group.")
+        ref = artifact["equipment"]
+        if not 1 <= ref["revision"] <= len(self.equipment.get((account_id, ref["equipment_id"]), [])):
+            raise Problem(422, "invalid_reference", "The equipment reference does not exist.")
+        if kind == "stacked_master":
+            self.check_stack(reqs, artifact)
+        last_capture = artifact["stack"]["last_captured_at"] if kind == "stacked_master" \
+            else artifact["captured_at"]
+        if parse_ts(last_capture) >= parse_ts(reqs["capture_deadline"]):
+            raise Problem(422, "capture_deadline_passed", "A capture started after the deadline.")
+        if artifact["size_bytes"] > self.limits["max_artifact_bytes"]:
+            raise Problem(413, "artifact_too_large", "An artifact exceeds max_artifact_bytes.")
+        if artifact.get("delivery") == "external":
+            accepted = reqs.get("external_delivery", {}).get("providers", [])
+            if artifact["external"]["provider"] not in accepted:
+                raise Problem(422, "external_delivery_not_accepted",
+                              "This project revision does not accept files from that provider.")
+        if "supersedes_artifact_id" in artifact:
+            old = self.artifacts.get(artifact["supersedes_artifact_id"])
+            if old is None or old["_account_id"] != account_id \
+                    or captures_of(old["_manifest"]) != captures_of(artifact):
+                raise Problem(422, "invalid_supersede", "A replacement must keep the capture identities.")
+
+    @staticmethod
+    def check_stack(reqs: dict, artifact: dict) -> None:
+        stack, rules = artifact["stack"], reqs["master_rules"]
+        subs = stack["subs"]
+        if stack["sub_count"] != len(subs):
+            raise Problem(422, "invalid_stack", "sub_count must equal the number of subs listed.")
+        if len({(s["origin_id"], s["capture_id"]) for s in subs}) != len(subs):
+            raise Problem(422, "invalid_stack", "A sub appears twice in the stack.")
+        if stack["sub_count"] < rules["min_sub_count"]:
+            raise Problem(422, "too_few_subs", f"A master needs at least {rules['min_sub_count']} subs.")
+        if abs(stack["integration_seconds"] - stack["sub_count"] * artifact["exposure_seconds"]) > 1:
+            raise Problem(422, "invalid_stack", "integration_seconds must equal sub_count × exposure_seconds.")
+        times = [parse_ts(s["captured_at"]) for s in subs]
+        if (min(times), max(times)) != (parse_ts(stack["first_captured_at"]),
+                                        parse_ts(stack["last_captured_at"])):
+            raise Problem(422, "invalid_stack", "first/last_captured_at must match the subs.")
+        if "drizzle_scale" in stack and not rules["allow_drizzle"]:
+            raise Problem(422, "drizzle_not_allowed", "This project does not accept drizzled masters.")
+
     def op_createSubmission(self, req):
         project_id = req.params["project_id"]
-        part = self.member(req, project_id)
+        membership = self.member(req, project_id)
         manifest = req.body
         existing = self.submissions.get(manifest["id"])
-        if existing:
-            if existing["manifest"] == manifest and existing["participation_id"] == part["id"]:
-                return 201, self.submission_view(existing)
-            raise Problem(409, "submission_conflict", "This submission ID has different content.")
-        if manifest["participation_id"] != part["id"]:
-            raise Problem(422, "participation_mismatch", "participation_id must be the caller's.")
-        reqs = self.revision(project_id, manifest["project_revision"])["requirements"]
-        self.require_current_terms(project_id, part.get("accepted_terms"))
+        if existing:  # A retry: same ID and body returns the submission.
+            if existing["manifest"] == manifest and existing["_account_id"] == req.cred.account_id:
+                return 200, self.submission_view(existing)
+            raise Problem(409, "id_conflict", "This submission ID has different content.")
+        reqs = self.requirements(project_id, manifest["project_revision"])
+        if membership["terms"] != self.requirements(project_id)["terms"]:
+            raise Problem(409, "terms_consent_required", "Accept the project's current terms first.")
         if now() >= parse_ts(reqs["submission_deadline"]):
             raise Problem(409, "submission_deadline_passed", "The submission deadline has passed.")
         if len(manifest["artifacts"]) > self.limits["max_artifacts_per_submission"]:
             raise Problem(413, "too_many_artifacts", "Too many artifacts in one submission.")
-        objectives = {o["id"] for o in reqs["objectives"]}
-        groups = {g["id"] for g in reqs["processing_groups"]}
         ids = [a["id"] for a in manifest["artifacts"]]
         if len(set(ids)) != len(ids) or any(i in self.artifacts for i in ids):
-            raise Problem(409, "artifact_conflict", "Artifact IDs must be new and unique.")
+            raise Problem(409, "id_conflict", "Artifact IDs must be new and unique.")
         for artifact in manifest["artifacts"]:
-            if not set(artifact["objective_ids"]) <= objectives \
-                    or artifact["processing_group_id"] not in groups:
-                raise Problem(422, "invalid_reference", "An artifact names an unknown objective or group.")
-            self.check_equipment_refs(part["id"], [artifact["equipment"]])
-            if parse_ts(artifact["captured_at"]) >= parse_ts(reqs["capture_deadline"]):
-                raise Problem(422, "capture_deadline_passed", "The capture started after the deadline.")
-            if artifact["size_bytes"] > self.limits["max_artifact_bytes"]:
-                raise Problem(413, "artifact_too_large", "An artifact exceeds max_artifact_bytes.")
-            if artifact.get("delivery") == "external":
-                accepted = reqs.get("external_delivery", {}).get("providers", [])
-                if artifact["external"]["provider"] not in accepted:
-                    raise Problem(422, "external_delivery_not_accepted",
-                                  "This project revision does not accept files from that provider.")
-            old = self.artifacts.get(artifact.get("supersedes_artifact_id", ""))
-            if "supersedes_artifact_id" in artifact and (
-                    old is None or old["_participation_id"] != part["id"]
-                    or (old["_manifest"]["origin_id"], old["_manifest"]["capture_id"])
-                    != (artifact["origin_id"], artifact["capture_id"])):
-                raise Problem(422, "invalid_supersede", "A replacement must keep the capture identity.")
+            self.check_artifact(reqs, artifact, req.cred.account_id)
         stamp = now()
-        sub = {"id": manifest["id"], "project_id": project_id, "participation_id": part["id"],
+        sub = {"id": manifest["id"], "project_id": project_id,
                "project_revision": manifest["project_revision"], "state": "uploading",
-               "created_at": ts(stamp), "manifest": manifest, "_upload_ids": []}
+               "created_at": ts(stamp), "manifest": manifest, "_upload_ids": [],
+               "_finalized": False, "_account_id": req.cred.account_id}
         for artifact in manifest["artifacts"]:
             self.artifacts[artifact["id"]] = {
                 "artifact_id": artifact["id"], "state": "uploading", "reason_codes": [],
                 "_manifest": artifact, "_submission_id": sub["id"], "_project_id": project_id,
-                "_participation_id": part["id"]}
+                "_account_id": req.cred.account_id}
             if artifact.get("delivery") == "external":
-                # A shared file: no upload session. A maintainer fetches it later.
+                # A shared file: no upload session. The project fetches it later.
                 self.artifacts[artifact["id"]]["state"] = "awaiting_retrieval"
                 continue
             upload = {"id": new_id(), "submission_id": sub["id"], "artifact_id": artifact["id"],
@@ -1081,57 +972,37 @@ class Api:
             self.uploads[upload["id"]] = upload
             sub["_upload_ids"].append(upload["id"])
         self.submissions[sub["id"]] = sub
+        self.settle_reports(manifest)
         return 201, self.submission_view(sub)
 
-    def readable_submission(self, req, sub: dict | None, context: str = "project") -> dict:
-        """Own submissions need read-own; others need read-all."""
-        if sub is None:
-            raise Problem(404, "not_found", "No such resource.")
-        part = self.member(req, sub["project_id"], self.alternatives(req, context))
-        if part["id"] != sub["participation_id"] \
-                and "submission:read-all" not in self.scopes(req.cred, part):
-            raise Problem(404, "not_found", "No such resource.")
+    def own_submission(self, req, submission_id: str) -> dict:
+        sub = self.submissions.get(submission_id)
+        if sub is None or sub["_account_id"] != req.cred.account_id \
+                or not self.covers(req.cred, sub["project_id"]):
+            raise Problem(404, "not_found", "No such submission.")
         return sub
 
-    def op_listProjectSubmissions(self, req):
-        project_id = req.params["project_id"]
-        self.member(req, project_id)
-        items = [self.submission_view(s) for s in self.submissions.values()
-                 if s["project_id"] == project_id]
-        return 200, self.page(req, items, "submissions")
-
     def op_getSubmission(self, req):
-        sub = self.readable_submission(req, self.submissions.get(req.params["submission_id"]))
-        return 200, self.submission_view(sub)
+        return 200, self.submission_view(self.own_submission(req, req.params["submission_id"]))
 
     def own_upload(self, req) -> dict:
         upload = self.uploads.get(req.params["upload_id"])
         if upload is None:
             raise Problem(404, "not_found", "No such upload.")
-        self.own(req, self.submissions[upload["submission_id"]]["participation_id"])
+        self.own_submission(req, upload["submission_id"])
         return upload
 
     def op_getUpload(self, req):
         return 200, self.upload_view(self.own_upload(req))
 
-    def op_renewUpload(self, req):
-        upload = self.own_upload(req)
-        if upload["_finalized"]:
-            raise Problem(409, "upload_finalized", "A finalized upload cannot change.")
-        sub = self.submissions[upload["submission_id"]]
-        self.require_current_terms(sub["project_id"],
-                                   self.participations[sub["participation_id"]].get("accepted_terms"))
-        stamp = now() + timedelta(seconds=self.limits["upload_staging_seconds"])
-        upload["expires_at"] = ts(stamp)
-        return 200, self.upload_view(upload)
-
     def op_putUploadPart(self, req):
         upload = self.own_upload(req)
+        self.member(req, self.submissions[upload["submission_id"]]["project_id"])
         number = req.params["part_number"]
         if upload["_finalized"]:
             raise Problem(409, "upload_finalized", "A finalized upload cannot change.")
         if parse_ts(upload["expires_at"]) <= now():
-            raise Problem(409, "upload_expired", "Renew the upload session first.")
+            raise Problem(409, "upload_expired", "The upload session expired; submit again.")
         if number > upload["part_count"]:
             raise Problem(422, "invalid_part_number", "The part number exceeds part_count.")
         last = upload["size_bytes"] - upload["part_size_bytes"] * (upload["part_count"] - 1)
@@ -1148,41 +1019,37 @@ class Api:
             return 200, existing["receipt"]
         receipt = {"part_number": number, "size_bytes": len(req.raw), "sha256": digest}
         upload["_parts"][number] = {"receipt": receipt, "data": req.raw}
+        # Each accepted part keeps the session alive for another staging period.
+        upload["expires_at"] = ts(now() + timedelta(seconds=self.limits["upload_staging_seconds"]))
         return 200, receipt
 
     def op_finalizeSubmission(self, req):
-        sub = self.submissions.get(req.params["submission_id"])
-        if sub is None:
-            raise Problem(404, "not_found", "No such resource.")
-        part = self.own(req, sub["participation_id"])
-        if sub.get("job_id"):
-            return 202, public(self.jobs[sub["job_id"]])  # Retries get the same job.
+        sub = self.own_submission(req, req.params["submission_id"])
+        if sub["_finalized"]:
+            return 202, self.submission_view(sub)  # A retry changes nothing.
+        membership = self.member(req, sub["project_id"])
         uploads = [self.uploads[u] for u in sub["_upload_ids"]]
         if any(len(u["_parts"]) != u["part_count"] for u in uploads):
             raise Problem(409, "upload_incomplete", "Some parts are missing; read the upload sessions.")
-        self.require_current_terms(sub["project_id"], part.get("accepted_terms"))
-        reqs = self.revision(sub["project_id"], sub["project_revision"])["requirements"]
+        if membership["terms"] != self.requirements(sub["project_id"])["terms"]:
+            raise Problem(409, "terms_consent_required", "Accept the project's current terms first.")
+        reqs = self.requirements(sub["project_id"], sub["project_revision"])
         if now() >= parse_ts(reqs["submission_deadline"]):
             raise Problem(409, "submission_deadline_passed", "The submission deadline has passed.")
-        job = {"id": new_id(), "kind": "assessment", "state": "queued", "poll_after_seconds": 1,
-               "_submission_id": sub["id"]}
-        self.jobs[job["id"]] = job
-        sub.update(state="processing", job_id=job["id"])
+        sub.update(state="processing", _finalized=True)
         for upload in uploads:
             upload["_finalized"] = True
             self.artifacts[upload["artifact_id"]]["state"] = "received"
-        threading.Thread(target=self.run_assessment, args=(job["id"],), daemon=True).start()
-        return 202, public(job)
+        threading.Thread(target=self.run_assessment, args=(sub["id"],), daemon=True).start()
+        return 202, self.submission_view(sub)
 
-    # ---- Assessment and credit ---------------------------------------------------
+    # ---- Assessment and credit ---------------------------------------------------------
 
-    def run_assessment(self, job_id: str) -> None:
-        """Background worker: verify each artifact and assess it."""
+    def run_assessment(self, submission_id: str) -> None:
+        """Background worker: verify each uploaded artifact and assess it."""
         time.sleep(0.1)
         with self.lock:
-            job = self.jobs[job_id]
-            sub = self.submissions[job["_submission_id"]]
-            job["state"] = "running"
+            sub = self.submissions[submission_id]
             for upload_id in sub["_upload_ids"]:
                 upload = self.uploads[upload_id]
                 artifact = self.artifacts[upload["artifact_id"]]
@@ -1190,28 +1057,49 @@ class Api:
                 data = b"".join(upload["_parts"][n]["data"] for n in sorted(upload["_parts"]))
                 for stored in upload["_parts"].values():
                     stored["data"] = b""  # Drop the bytes; this server keeps no files.
-                self.record_assessment(sub, artifact, *self.assess(sub, artifact["_manifest"], data),
-                                       measurements=artifact["_manifest"]["measurements"],
-                                       assessment_id=new_id(), assessor_id=ASSESSOR_ID)
+                self.record(sub, artifact, *self.assess(sub, artifact["_manifest"], data))
             self.finish_if_done(sub)
 
     def finish_if_done(self, sub: dict) -> None:
-        """Complete the submission and its job once no artifact is waiting."""
+        """Complete the submission once no artifact is waiting."""
         states = {self.artifacts[a["id"]]["state"] for a in sub["manifest"]["artifacts"]}
-        if states & {"uploading", "awaiting_retrieval", "received", "validating"}:
-            return
-        sub["state"] = "complete"
-        self.jobs[sub["job_id"]]["state"] = "succeeded"
+        if not states & {"uploading", "awaiting_retrieval", "received", "validating"}:
+            sub["state"] = "complete"
+
+    def panel_of(self, project_id: str, manifest: dict) -> str | None:
+        """The frame's panel, if it names one this project laid out."""
+        panel = self.panels.get(manifest.get("panel_id", ""))
+        return manifest["panel_id"] if panel and panel["project_id"] == project_id else None
+
+    def held_elsewhere(self, project_id: str, manifest: dict) -> bool:
+        """True if another artifact already holds credit for one of these captures."""
+        replaced = manifest.get("supersedes_artifact_id")
+        return any(self.claimed.get((project_id, *capture)) not in (None, manifest["id"], replaced)
+                   for capture in captures_of(manifest))
+
+    @staticmethod
+    def credited_objectives(reqs: dict, manifest: dict) -> list:
+        """Every objective a frame serves: those listed, and others on the same
+        target and group that its filter's passbands also cover."""
+        objectives = {o["id"]: o for o in reqs["objectives"]}
+        served = []
+        for oid in manifest["objective_ids"]:
+            for other in objectives_served(reqs, objectives[oid], manifest["bandpasses"],
+                                           manifest["exposure_seconds"]):
+                if other not in served:
+                    served.append(other)
+        return served
 
     def assess(self, sub: dict, manifest: dict, data: bytes | None):
         """Automatic checks. Returns (decision, reasons, credits).
 
-        This server does not decode FITS or XISF, compute coverage or measure
-        quality. It checks the file hash, exposure range, solve evidence and
-        submitted measurements, then applies goal and duplicate rules. data is
-        None when a maintainer already verified an external file's hash.
+        This server does not decode FITS or XISF or measure quality. It checks
+        the file hash, passbands, exposure range, solve evidence, coverage of
+        the named panel and the submitted measurements, then applies goal and
+        duplicate rules. data is None when the project already verified an
+        external file's hash.
         """
-        reqs = self.revision(sub["project_id"], sub["project_revision"])["requirements"]
+        reqs = self.requirements(sub["project_id"], sub["project_revision"])
         objectives = {o["id"]: o for o in reqs["objectives"]}
         reasons = []
         if data is not None and sha256(data) != manifest["sha256"]:
@@ -1219,6 +1107,8 @@ class Api:
         measured = {m["metric"]: m["value"] for m in manifest["measurements"]}
         for oid in manifest["objective_ids"]:
             objective = objectives[oid]
+            if not planning.serves(manifest["bandpasses"], objective["bandpasses"]):
+                reasons.append("bandpass_mismatch")
             exposure = objective["exposure"]
             if not exposure["min_seconds"] <= manifest["exposure_seconds"] <= exposure["max_seconds"]:
                 reasons.append("exposure_out_of_range")
@@ -1234,139 +1124,66 @@ class Api:
                         reasons.append("required_measurement_missing")
                 elif value < rule.get("min_value", value) or value > rule.get("max_value", value):
                     reasons.append("quality_limit")
+        panel_id = self.panel_of(sub["project_id"], manifest)
+        if panel_id and manifest.get("solve"):
+            covered = planning.coverage(manifest["solve"]["center"], self.panels[panel_id]["footprint"])
+            if any(covered < objectives[oid]["minimum_coverage_fraction"] for oid in manifest["objective_ids"]):
+                reasons.append("coverage_too_low")
         if reasons:
             return "rejected", sorted(set(reasons)), []
+        if self.held_elsewhere(sub["project_id"], manifest):
+            return "rejected", ["duplicate_capture"], []
+        return "accepted", [], self.credits_for(sub, manifest)
+
+    def credits_for(self, sub: dict, manifest: dict) -> list:
+        """Credit per objective. Surplus once the frame's panel already has the full goal."""
+        reqs = self.requirements(sub["project_id"], sub["project_revision"])
+        objectives = {o["id"]: o for o in reqs["objectives"]}
+        panel_id = self.panel_of(sub["project_id"], manifest)
+        replaced = manifest.get("supersedes_artifact_id")
         credits = []
-        replaced = manifest.get("supersedes_artifact_id")
-        for oid in manifest["objective_ids"]:
-            key = (sub["project_id"], oid, manifest["origin_id"], manifest["capture_id"])
-            held = self.credits.get(key)
-            if held and held["artifact_id"] != replaced:
-                return "rejected", ["duplicate_capture"], []
-            if replaced and held:
-                surplus = held["surplus"]  # A replacement keeps its place in the goal.
-            else:
-                accepted = [c for k, c in self.credits.items()
-                            if k[:2] == key[:2] and not c["surplus"]]
-                goal = objectives[oid]["goal"]
-                surplus = len(accepted) >= goal.get("accepted_frames", 0) and \
-                    sum(c["seconds"] for c in accepted) >= goal.get("accepted_integration_seconds", 0)
-            if surplus and reqs["surplus_policy"] == "reject_excess":
-                continue
-            credits.append({"objective_id": oid, "accepted_frames": 0 if surplus else 1,
-                            "accepted_integration_seconds": 0 if surplus else manifest["exposure_seconds"],
-                            "coverage_fraction": 1.0, "surplus": surplus})
-        if not credits:
-            return "rejected", ["goal_already_met"], []
-        return "accepted", [], credits
+        for oid in self.credited_objectives(reqs, manifest):
+            held = self.credits.get((sub["project_id"], oid, replaced)) if replaced else None
+            surplus = held["surplus"] if held else \
+                self.panel_deficit(sub["project_id"], objectives[oid], panel_id) <= 0
+            credits.append({"objective_id": oid, "surplus": surplus,
+                            "frames": 0 if surplus else frames_in(manifest),
+                            "seconds": 0 if surplus else integration_of(manifest)})
+        return credits
 
-    def record_assessment(self, sub, artifact, decision, reasons, credits, *, measurements,
-                          assessment_id, assessor_id) -> dict:
-        """Append an assessment and update credit in one step."""
-        manifest = artifact["_manifest"]
-        replaced = manifest.get("supersedes_artifact_id")
-        for key in [k for k, c in self.credits.items() if c["artifact_id"] == manifest["id"]]:
+    def uncredit(self, artifact_id: str) -> None:
+        for key in [k for k, c in self.credits.items() if c["artifact_id"] == artifact_id]:
             del self.credits[key]
-        if decision == "accepted":
-            if replaced:
-                for key in [k for k, c in self.credits.items() if c["artifact_id"] == replaced]:
-                    del self.credits[key]
-                self.artifacts[replaced]["state"] = "superseded"
-            for credit in credits:
-                key = (sub["project_id"], credit["objective_id"], manifest["origin_id"],
-                       manifest["capture_id"])
-                self.credits[key] = {"artifact_id": manifest["id"], "surplus": credit["surplus"],
-                                     "seconds": credit["accepted_integration_seconds"]}
-        sequence = len(self.events) + 1
-        assessment = {
-            "id": assessment_id, "artifact_id": manifest["id"],
-            "policy_revision": self.revision(sub["project_id"], sub["project_revision"])
-            ["requirements"]["acceptance_policy_revision"],
-            "decision": decision, "reasons": reasons, "measurements": measurements, "credits": credits,
-            "submission_id": sub["id"], "project_id": sub["project_id"],
-            "participation_id": sub["participation_id"], "origin_id": manifest["origin_id"],
-            "capture_id": manifest["capture_id"], "assessed_at": ts(now()),
-            "assessor_id": assessor_id, "event_sequence": sequence}
-        self.assessments[assessment_id] = assessment
-        artifact.update(state=decision, assessment_id=assessment_id, reason_codes=reasons)
-        owner = self.participations[sub["participation_id"]]["account_id"]
-        self.emit(sub["project_id"], "assessment", assessment, owner)
-        self.emit(sub["project_id"], "progress", self.progress(sub["project_id"]))
-        return assessment
+        for key in [k for k, a in self.claimed.items() if a == artifact_id]:
+            del self.claimed[key]
 
-    def op_recordRetrieval(self, req):
-        """A maintainer reports the result of fetching an externally shared file."""
-        sub = self.submissions.get(req.params["submission_id"])
-        if sub is None:
-            raise Problem(404, "not_found", "No such resource.")
-        part = self.member(req, sub["project_id"])
-        self.precondition(req, etag(self.submission_view(sub)))
-        artifact = self.artifacts.get(req.params["artifact_id"])
-        if artifact is None or artifact["_submission_id"] != sub["id"]:
-            raise Problem(404, "not_found", "No such artifact in this submission.")
-        if artifact["state"] != "awaiting_retrieval" or not sub.get("job_id"):
-            raise Problem(409, "invalid_transition", "The artifact is not finalized and awaiting retrieval.")
-        body, manifest = req.body, artifact["_manifest"]
-        if body["outcome"] == "verified":
-            if (body["sha256"], body["size_bytes"]) != (manifest["sha256"], manifest["size_bytes"]):
-                raise Problem(422, "digest_mismatch", "verified requires the manifest's hash and size.")
-            artifact["state"] = "validating"
-            result = self.assess(sub, manifest, None)
-        else:
-            reason = "external_unavailable" if body["outcome"] == "unavailable" else "digest_mismatch"
-            result = ("rejected", [reason], [])
-        self.record_assessment(sub, artifact, *result, measurements=manifest["measurements"],
-                               assessment_id=new_id(), assessor_id=part["account_id"])
-        self.finish_if_done(sub)
-        return 200, self.submission_view(sub)
-
-    def op_listAssessments(self, req):
-        sub = self.readable_submission(req, self.submissions.get(req.params["submission_id"]))
-        items = [a for a in self.assessments.values() if a["submission_id"] == sub["id"]]
-        return 200, self.page(req, items, "assessments")
-
-    def op_appendAssessment(self, req):
-        sub = self.submissions.get(req.params["submission_id"])
-        if sub is None:
-            raise Problem(404, "not_found", "No such resource.")
-        part = self.member(req, sub["project_id"])
-        self.precondition(req, etag(self.submission_view(sub)))
-        body = req.body
-        if body["id"] in self.assessments:
-            raise Problem(409, "already_exists", "An assessment with this ID exists.")
-        artifact = self.artifacts.get(body["artifact_id"])
-        if artifact is None or artifact["_submission_id"] != sub["id"]:
-            raise Problem(422, "invalid_reference", "The artifact is not in this submission.")
-        if artifact["state"] not in ("accepted", "rejected"):
-            raise Problem(409, "artifact_not_validated", "Only validated artifacts can be assessed.")
+    def record(self, sub, artifact, decision, reasons, credits) -> None:
+        """Apply an assessment and update credit in one step."""
         manifest = artifact["_manifest"]
-        for credit in body["credits"]:
-            if credit["objective_id"] not in manifest["objective_ids"]:
-                raise Problem(422, "invalid_reference", "A credit names an objective the artifact lacks.")
-            if not credit["surplus"] and credit["accepted_integration_seconds"] != manifest["exposure_seconds"]:
-                raise Problem(422, "invalid_credit", "Credit must equal the artifact's exposure.")
-            key = (sub["project_id"], credit["objective_id"], manifest["origin_id"], manifest["capture_id"])
-            held = self.credits.get(key)
-            if held and held["artifact_id"] not in (manifest["id"], manifest.get("supersedes_artifact_id")):
-                raise Problem(409, "duplicate_capture", "Another artifact holds credit for this capture.")
-        assessment = self.record_assessment(
-            sub, artifact, body["decision"], body["reasons"], body["credits"],
-            measurements=body["measurements"], assessment_id=body["id"],
-            assessor_id=part["account_id"])
-        return 201, assessment
-
-    def op_getJob(self, req):
-        job = self.jobs.get(req.params["job_id"])
-        if job is None:
-            raise Problem(404, "not_found", "No such job.")
-        sub = self.readable_submission(req, self.submissions[job["_submission_id"]], job["kind"])
-        view = public(job)
-        if job["state"] == "succeeded":
-            view["result"] = self.submission_view(sub)
-        return 200, view
+        project_id = sub["project_id"]
+        self.uncredit(manifest["id"])
+        artifact.update(state=decision, reason_codes=reasons)
+        artifact.pop("credited_frames", None)
+        artifact.pop("credited_integration_seconds", None)
+        if decision != "accepted":
+            return
+        replaced = manifest.get("supersedes_artifact_id")
+        if replaced:
+            self.uncredit(replaced)
+            self.artifacts[replaced]["state"] = "superseded"
+        for capture in captures_of(manifest):
+            self.claimed[(project_id, *capture)] = manifest["id"]
+        for credit in credits:
+            self.credits[(project_id, credit["objective_id"], manifest["id"])] = {
+                "artifact_id": manifest["id"], "surplus": credit["surplus"], "frames": credit["frames"],
+                "seconds": credit["seconds"], "seconds_each": manifest["exposure_seconds"],
+                "captures": captures_of(manifest), "panel_id": self.panel_of(project_id, manifest)}
+        if any(not c["surplus"] for c in credits):
+            artifact.update(credited_frames=frames_in(manifest),
+                            credited_integration_seconds=integration_of(manifest))
 
 
-# ---- HTTP ----------------------------------------------------------------------
+# ---- HTTP ---------------------------------------------------------------------------
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1402,16 +1219,22 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(host: str = "127.0.0.1", port: int = 0, keys: dict[str, str] | None = None,
           part_size: int = 1 << 20, check_responses: bool = False,
-          verbose: bool = False) -> ThreadingHTTPServer:
+          verbose: bool = False, sample: bool = True) -> ThreadingHTTPServer:
     """Create a server bound to host:port. Call serve_forever() to run it.
 
-    keys maps account names to API key secrets. The returned server has
-    issue_pairing_code(account) for minting pairing codes.
+    keys maps account names to API key secrets. With sample, the server loads
+    the sample projects and makes every account in keys an active member.
+    The returned server has api (the server tools), issue_pairing_code and
+    sample_project_ids.
     """
     httpd = ThreadingHTTPServer((host, port), Handler)
     bound = httpd.server_address[1]
     httpd.api = Api(f"http://{host}:{bound}", keys or {}, part_size, check_responses)
     httpd.issue_pairing_code = httpd.api.issue_pairing_code
+    httpd.sample_project_ids = httpd.api.load_samples() if sample else []
+    for name in keys or {}:
+        for project_id in httpd.sample_project_ids:
+            httpd.api.join(name, project_id)
     httpd.verbose = verbose
     return httpd
 
@@ -1421,21 +1244,34 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--key", action="append", default=[], metavar="ACCOUNT=SECRET",
-                        help="Create an account with an API key that holds every scope. Repeatable.")
+                        help="Create an account with an API key. Repeatable.")
     parser.add_argument("--pairing-code", action="append", default=[], metavar="ACCOUNT=CODE",
-                        help="Issue a pairing code (valid one hour) with every scope. Repeatable.")
+                        help="Issue a pairing code (valid one hour). Repeatable.")
+    parser.add_argument("--join", action="append", default=[], metavar="ACCOUNT=PROJECT",
+                        help="Make an account an active member of a project. Repeatable.")
     parser.add_argument("--part-size", type=int, default=1 << 20, help="Upload part size in bytes.")
     parser.add_argument("--check-responses", action="store_true",
                         help="Validate every response against the contract (for testing).")
     parser.add_argument("--verbose", action="store_true", help="Log each request.")
+    parser.add_argument("--no-sample", action="store_true", help="Do not load the sample projects.")
     args = parser.parse_args()
     keys = dict(item.split("=", 1) for item in args.key)
     codes = dict(item.split("=", 1) for item in args.pairing_code)
     if not keys and not codes:
-        keys = {name: secrets.token_urlsafe(24) for name in ("owner", "alice", "bob")}
+        keys = {name: secrets.token_urlsafe(24) for name in ("alice", "bob")}
         codes = {name: None for name in keys}
-    httpd = serve(args.host, args.port, keys, args.part_size, args.check_responses, args.verbose)
-    print(f"AstroCollab reference server at {httpd.api.base_url}/v1", flush=True)
+    httpd = serve(args.host, args.port, keys, args.part_size, args.check_responses, args.verbose,
+                  sample=not args.no_sample)
+    api = httpd.api
+    for name in codes:  # Pairing-code accounts join the samples too.
+        for project_id in httpd.sample_project_ids:
+            api.join(name, project_id)
+    for item in args.join:
+        name, project_id = item.split("=", 1)
+        api.join(name, project_id)
+    print(f"AstroCollab reference server at {api.base_url}/v1", flush=True)
+    for project_id in httpd.sample_project_ids:
+        print(f"  Sample project {api.project_view(project_id)['title']}: {project_id}", flush=True)
     for name, secret in keys.items():
         print(f"  API key for {name}: {secret}", flush=True)
     for name, code in codes.items():

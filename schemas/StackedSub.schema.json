@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/StackedSub.schema.json",
+  "title": "StackedSub",
+  "type": "object",
+  "required": [
+    "origin_id",
+    "capture_id",
+    "captured_at",
+    "sha256"
+  ],
+  "properties": {
+    "origin_id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "capture_id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "captured_at": {
+      "$ref": "Timestamp.schema.json"
+    },
+    "sha256": {
+      "$ref": "Sha256.schema.json",
+      "description": "SHA-256 of the calibrated sub as it entered the stack."
+    }
+  },
+  "description": "One sub that went into a master.",
+  "additionalProperties": false
+}

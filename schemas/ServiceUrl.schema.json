@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/ServiceUrl.schema.json",
+  "title": "ServiceUrl",
+  "type": "string",
+  "format": "uri",
+  "pattern": "^(https://|http://(127\\.0\\.0\\.1|localhost|\\[::1\\])(:[0-9]+)?(/|$))",
+  "description": "HTTPS, or plain HTTP on a loopback address for local development."
+}

@@ -10,8 +10,8 @@ authorization rules and failure behavior explicit.
 
 For a contract change, update the relevant section of `spec/protocol.md`, the
 TypeSpec source, JSON examples and conformance scenarios together. Regenerate
-`openapi/astrocollab.yaml` with `python tools/build_openapi.py`; never edit it by
-hand.
+`openapi/astrocollab.yaml`, `schemas/` and `spec/api.md` with
+`python tools/build_openapi.py`; never edit them by hand.
 Add rejection fixtures for new structural constraints. Specify authorization,
 retry behavior and state changes for every mutation. Preserve nonexclusive
 participation and assessment before credit.

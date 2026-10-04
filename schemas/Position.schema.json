@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Position.schema.json",
+  "title": "Position",
+  "type": "object",
+  "required": [
+    "ra_degrees",
+    "dec_degrees"
+  ],
+  "properties": {
+    "ra_degrees": {
+      "type": "number",
+      "minimum": 0,
+      "exclusiveMaximum": 360
+    },
+    "dec_degrees": {
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90
+    }
+  },
+  "additionalProperties": false
+}

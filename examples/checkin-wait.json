@@ -1,0 +1,7 @@
+{
+  "action": "wait",
+  "next_checkin_seconds": 3600,
+  "reason_codes": [
+    "rig_incomplete"
+  ]
+}

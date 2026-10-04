@@ -28,7 +28,7 @@ is no sign-in flow and nothing to refresh.
      "key_id": "00000000-0000-4000-8000-000000000018",
      "api_key": "acpk_...",
      "client_name": "Roof rig 2",
-     "scopes": ["account:read", "participation:manage", "project:read", "submission:write"]
+     "installation_id": "00000000-0000-4000-8000-000000000020"
    }
    ```
 
@@ -38,13 +38,13 @@ is no sign-in flow and nothing to refresh.
 5. **Check it:**
 
    ```sh
-   curl -H "Authorization: Bearer $KEY" $API/me/participations
+   curl -H "Authorization: Bearer $KEY" $API/me/projects
    ```
 
    `200` means the key works and lists the user's projects. `401` means the key
    is wrong, expired or revoked.
-6. **Use it on every route.** The same key joins projects, registers equipment
-   and uploads frames.
+6. **Use it on every route.** The same key lists projects, registers rigs, asks
+   for work and uploads frames.
 
 Make `installation_id` a random UUID when the client is installed, and keep it.
 Pairing again with the same ID replaces that installation's old key, so a user
@@ -60,53 +60,28 @@ key the same way: store it, check it, use it.
 
 ## What a key can do
 
-When the user issues a pairing code, they pick the key's scopes and may limit
-it to some projects. Account routes, such as joining a project, need only the
-key's scopes. On a project route, the server allows a request only when all of these
-hold:
+A key acts for its account. It can do everything a contributor does: list the
+account's projects, register rigs, check in and submit data. When issuing the
+pairing code, the user may limit the key to some projects or set an expiry.
 
-- the account has an active participation in that project;
-- the key covers that project;
-- both the key and the participant's role include the needed scope.
-
-So a contributor's key cannot publish a project, even if the key lists
-`project:manage`. Only the project's maintainers hold that scope.
-
-| Scope | Allows |
-| --- | --- |
-| `account:read` | Read memberships and sync project data. |
-| `participation:manage` | Join, pause, resume or leave projects; renew terms consent. |
-| `project:create` | Create projects. |
-| `project:read` | Read project data, your own offers, progress and jobs. |
-| `offer:write` | Register equipment, offer time, set planning policy, check in. |
-| `intent:write` | Publish planned work. |
-| `status:write` | Report live status. |
-| `submission:write` | Create submissions, upload parts, finalize. |
-| `submission:read-own` | Read your own submissions and assessments. |
-| `project:manage` | Maintainers: edit and publish requirements. |
-| `participation:review` | Maintainers: approve or revoke members. |
-| `assessment:write` | Maintainers: record manual assessments. |
-| `submission:read-all` | Maintainers: read every submission's metadata. |
-
-The API reference lists the scopes each operation needs. The protocol gives the
-[full rules](protocol.md#scopes-and-contexts).
+On project routes the server also checks membership: only active members of a
+project receive assignments for it and submit data to it. A key limited to other
+projects gets `403` or `404`.
 
 ## Server checklist
 
 To support API keys, a server needs:
 
-- an account page where users issue pairing codes and list and revoke keys;
+- web pages where users issue pairing codes and list and revoke keys;
 - `POST /pair`, which consumes a code and creates a key in one transaction, and
   revokes any earlier key for the same account and installation;
 - at least 128 bits of randomness in each code and key, stored only as hashes;
 - codes that work once and expire within an hour, and a `429` after repeated
   bad codes;
-- for each key: account, client name, installation, scopes, optional project
-  list, optional expiry, last use;
+- for each key: account, client name, installation, optional project list,
+  optional expiry, optional rig, last use;
 - on each request: look up the key by hash; reject unknown, expired or revoked
-  keys with `401`; then check membership and scopes as above;
-- the key's ID as the client ID for idempotency keys, status writers and sync
-  cursors.
+  keys with `401`; then check membership.
 
 The [reference server](../reference/README.md) shows one way to do this.
 

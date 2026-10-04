@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/CheckinResult.schema.json",
+  "title": "CheckinResult",
+  "type": "object",
+  "required": [
+    "action",
+    "next_checkin_seconds",
+    "reason_codes"
+  ],
+  "properties": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "image",
+        "continue",
+        "wait"
+      ]
+    },
+    "next_checkin_seconds": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 86400,
+      "description": "Check in again after this many seconds."
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "Code.schema.json"
+      },
+      "minItems": 0,
+      "maxItems": 32
+    },
+    "assignment": {
+      "$ref": "Assignment.schema.json"
+    }
+  },
+  "description": "`image` carries a new assignment. `continue` means keep working on the current one.\n`wait` means nothing suits this rig now; `reason_codes` say why, such as\n`rig_incomplete`, `no_matching_filter` or `goals_met`.",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "image"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "assignment"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "assignment"
+          ]
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,136 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "title": "M31 deep H-alpha",
+  "state": "open",
+  "revision": 2,
+  "published_at": "2026-10-04T04:00:00Z",
+  "requirements": {
+    "title": "M31 deep H-alpha",
+    "description": "Calibrated linear mono data for the outer disk.",
+    "targets": [
+      {
+        "id": "00000000-0000-4000-8000-000000000101",
+        "name": "M31 coverage unit 1",
+        "footprint": {
+          "center": {
+            "ra_degrees": 9.82,
+            "dec_degrees": 41.269
+          },
+          "width_degrees": 1.25,
+          "height_degrees": 1.0,
+          "position_angle_degrees": 0
+        }
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000102",
+        "name": "M31 coverage unit 2",
+        "footprint": {
+          "center": {
+            "ra_degrees": 11.55,
+            "dec_degrees": 41.269
+          },
+          "width_degrees": 1.25,
+          "height_degrees": 1.0,
+          "position_angle_degrees": 0
+        }
+      }
+    ],
+    "processing_groups": [
+      {
+        "id": "00000000-0000-4000-8000-000000000006",
+        "name": "Linear mono wide field",
+        "sampling_arcsec_per_pixel": {
+          "min": 0.8,
+          "max": 1.5
+        },
+        "color_state": "mono",
+        "registration": "unregistered",
+        "linear": true,
+        "required_calibration_steps": [
+          "dark_subtract",
+          "flat_correct"
+        ]
+      }
+    ],
+    "objectives": [
+      {
+        "id": "00000000-0000-4000-8000-000000000103",
+        "target_id": "00000000-0000-4000-8000-000000000101",
+        "processing_group_id": "00000000-0000-4000-8000-000000000006",
+        "purpose": "deep",
+        "exposure": {
+          "min_seconds": 300,
+          "max_seconds": 600
+        },
+        "goal": {
+          "accepted_frames": 120,
+          "accepted_integration_seconds": 36000
+        },
+        "minimum_coverage_fraction": 0.95,
+        "fresh_pixel_solve": true,
+        "quality_rules": [
+          {
+            "metric": "fwhm",
+            "method": "example.psf",
+            "method_version": "1",
+            "unit": "arcsec",
+            "required": false,
+            "max_value": 4.0
+          }
+        ],
+        "required_features": [],
+        "bandpasses": [
+          {
+            "name": "H-alpha",
+            "center_nm": 656.3,
+            "width_nm": 3.0
+          }
+        ]
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000104",
+        "target_id": "00000000-0000-4000-8000-000000000102",
+        "processing_group_id": "00000000-0000-4000-8000-000000000006",
+        "purpose": "deep",
+        "exposure": {
+          "min_seconds": 300,
+          "max_seconds": 600
+        },
+        "goal": {
+          "accepted_frames": 120,
+          "accepted_integration_seconds": 36000
+        },
+        "minimum_coverage_fraction": 0.95,
+        "fresh_pixel_solve": true,
+        "quality_rules": [
+          {
+            "metric": "fwhm",
+            "method": "example.psf",
+            "method_version": "1",
+            "unit": "arcsec",
+            "required": false,
+            "max_value": 4.0
+          }
+        ],
+        "required_features": [],
+        "bandpasses": [
+          {
+            "name": "H-alpha",
+            "center_nm": 656.3,
+            "width_nm": 3.0
+          }
+        ]
+      }
+    ],
+    "terms": {
+      "id": "00000000-0000-4000-8000-000000000019",
+      "version": 1,
+      "url": "https://collab.example/terms/m31/1",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "capture_deadline": "2026-12-01T00:00:00Z",
+    "submission_deadline": "2026-12-15T00:00:00Z",
+    "required_features": [],
+    "deliverable": "calibrated_subs"
+  }
+}

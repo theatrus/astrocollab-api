@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/EquipmentRef.schema.json",
+  "title": "EquipmentRef",
+  "type": "object",
+  "required": [
+    "equipment_id",
+    "revision"
+  ],
+  "properties": {
+    "equipment_id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/ExposureRange.schema.json",
+  "title": "ExposureRange",
+  "type": "object",
+  "required": [
+    "min_seconds",
+    "max_seconds"
+  ],
+  "properties": {
+    "min_seconds": {
+      "type": "number",
+      "maximum": 86400,
+      "exclusiveMinimum": 0
+    },
+    "max_seconds": {
+      "type": "number",
+      "maximum": 86400,
+      "exclusiveMinimum": 0
+    }
+  },
+  "description": "Server MUST enforce min_seconds <= max_seconds.",
+  "additionalProperties": false
+}

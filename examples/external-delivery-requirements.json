@@ -1,9 +1,6 @@
 {
   "title": "M31 deep H-alpha",
   "description": "Calibrated linear mono data for the outer disk.",
-  "visibility": "public",
-  "enrollment": "open",
-  "state": "open",
   "targets": [
     {
       "id": "00000000-0000-4000-8000-000000000004",
@@ -41,11 +38,6 @@
       "id": "00000000-0000-4000-8000-000000000005",
       "target_id": "00000000-0000-4000-8000-000000000004",
       "processing_group_id": "00000000-0000-4000-8000-000000000006",
-      "bandpass": {
-        "name": "H-alpha",
-        "center_nm": 656.3,
-        "width_nm": 3.0
-      },
       "purpose": "deep",
       "exposure": {
         "min_seconds": 300,
@@ -67,7 +59,14 @@
           "max_value": 4.0
         }
       ],
-      "required_features": []
+      "required_features": [],
+      "bandpasses": [
+        {
+          "name": "H-alpha",
+          "center_nm": 656.3,
+          "width_nm": 3.0
+        }
+      ]
     }
   ],
   "terms": {
@@ -78,8 +77,6 @@
   },
   "capture_deadline": "2026-12-01T00:00:00Z",
   "submission_deadline": "2026-12-15T00:00:00Z",
-  "surplus_policy": "retain_and_attribute",
-  "acceptance_policy_revision": 1,
   "required_features": [],
   "external_delivery": {
     "providers": [
@@ -87,5 +84,6 @@
       "dropbox"
     ],
     "instructions": "Share each file with collab@example.org. Read access is enough."
-  }
+  },
+  "deliverable": "calibrated_subs"
 }

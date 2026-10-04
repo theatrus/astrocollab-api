@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Measurement.schema.json",
+  "title": "Measurement",
+  "type": "object",
+  "required": [
+    "metric",
+    "method",
+    "method_version",
+    "unit",
+    "value",
+    "measured_at"
+  ],
+  "properties": {
+    "metric": {
+      "$ref": "Text.schema.json"
+    },
+    "method": {
+      "$ref": "Text.schema.json"
+    },
+    "method_version": {
+      "$ref": "Text.schema.json"
+    },
+    "unit": {
+      "$ref": "Text.schema.json"
+    },
+    "value": {
+      "type": "number"
+    },
+    "measured_at": {
+      "$ref": "Timestamp.schema.json"
+    }
+  },
+  "additionalProperties": false
+}

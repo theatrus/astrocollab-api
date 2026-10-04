@@ -1,7 +1,6 @@
 {
   "project_id": "00000000-0000-4000-8000-000000000001",
-  "project_revision": 1,
-  "event_sequence": 44,
+  "revision": 1,
   "as_of": "2026-10-04T05:10:00Z",
   "objectives": [
     {
@@ -10,9 +9,9 @@
         "accepted_frames": 120,
         "accepted_integration_seconds": 36000
       },
-      "intended_frames": 96,
-      "captured_reported_frames": 1,
-      "received_pending_frames": 0,
+      "assigned_frames": 96,
+      "reported_frames": 12,
+      "pending_frames": 0,
       "accepted_frames": 1,
       "accepted_integration_seconds": 300,
       "rejected_frames": 0,
@@ -20,6 +19,6 @@
       "complete": false
     }
   ],
-  "distinct_credited_captures": 1,
-  "distinct_credited_integration_seconds": 300
+  "accepted_frames": 1,
+  "accepted_integration_seconds": 300
 }

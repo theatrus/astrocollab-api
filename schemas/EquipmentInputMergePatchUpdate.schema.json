@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/EquipmentInputMergePatchUpdate.schema.json",
+  "title": "EquipmentInputMergePatchUpdate",
+  "type": "object",
+  "properties": {
+    "name": {
+      "$ref": "Text.schema.json"
+    },
+    "sensor_width_pixels": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minimum": 1,
+      "maximum": 100000,
+      "description": "Unbinned sensor size. Field of view does not depend on binning; sampling does."
+    },
+    "sensor_height_pixels": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minimum": 1,
+      "maximum": 100000
+    },
+    "pixel_size_um": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "maximum": 1000,
+      "exclusiveMinimum": 0
+    },
+    "focal_length_mm": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "maximum": 100000,
+      "exclusiveMinimum": 0
+    },
+    "binning_x": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minimum": 1,
+      "maximum": 16,
+      "description": "Defaults to 1."
+    },
+    "binning_y": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minimum": 1,
+      "maximum": 16,
+      "description": "Defaults to 1."
+    },
+    "color_state": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "mono",
+            "cfa",
+            "debayered_rgb"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "filters": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "FilterMergePatchUpdateReplaceOnly.schema.json"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minItems": 1,
+      "maxItems": 100,
+      "description": "Filters the rig can use. A color camera with no filter lists one `kind: none` filter."
+    },
+    "camera": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "telescope": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "rotation": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "fixed",
+            "manual",
+            "motorized"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Defaults to `fixed`."
+    },
+    "confirmed_position_angle_degrees": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minimum": 0,
+      "exclusiveMaximum": 360
+    },
+    "site": {
+      "anyOf": [
+        {
+          "$ref": "SiteMergePatchUpdateOrCreate.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "extensions": {
+      "anyOf": [
+        {
+          "type": "object",
+          "unevaluatedProperties": {}
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "maxProperties": 32,
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$"
+      }
+    }
+  },
+  "description": "A rig's description. Only `name` is required: the user may enter some details on the\nserver's web pages and the rig others. To plan for a rig, the server needs the sensor\nsize, pixel size, focal length, color state and at least one filter; until then,\ncheck-ins return `review_required` with reason `rig_incomplete`.",
+  "additionalProperties": false
+}

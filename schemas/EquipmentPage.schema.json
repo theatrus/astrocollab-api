@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/EquipmentPage.schema.json",
+  "title": "EquipmentPage",
+  "type": "object",
+  "required": [
+    "items",
+    "next_cursor"
+  ],
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "Equipment.schema.json"
+      },
+      "minItems": 0,
+      "maxItems": 100
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "maxLength": 4096
+    }
+  },
+  "additionalProperties": false
+}

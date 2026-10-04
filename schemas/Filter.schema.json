@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Filter.schema.json",
+  "title": "Filter",
+  "type": "object",
+  "required": [
+    "id",
+    "bandpasses"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "name": {
+      "$ref": "Text.schema.json",
+      "description": "The user's name for it, such as \"Ha 3 nm\"."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "luminance",
+        "rgb",
+        "narrowband",
+        "dual_narrowband",
+        "multi_band",
+        "broadband",
+        "light_pollution",
+        "uv_ir_cut",
+        "none"
+      ]
+    },
+    "manufacturer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "bandpasses": {
+      "type": "array",
+      "items": {
+        "$ref": "Bandpass.schema.json"
+      },
+      "minItems": 1,
+      "maxItems": 8
+    }
+  },
+  "description": "A filter on a rig. Each filter lists the passbands it lets through: one for a\nnarrowband or luminance filter, two for a dual-narrowband filter on a color camera,\nthree for an RGB or multi-band filter. Use a filter with no glass in the light path\nas `kind: none` with the camera's own response as its passband.",
+  "additionalProperties": false
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/CalibrationStep.schema.json",
+  "title": "CalibrationStep",
+  "type": "object",
+  "required": [
+    "operation",
+    "software",
+    "version",
+    "parameters"
+  ],
+  "properties": {
+    "operation": {
+      "type": "string",
+      "enum": [
+        "bias_subtract",
+        "dark_subtract",
+        "flat_correct",
+        "dark_flat_correct",
+        "debayer",
+        "register"
+      ]
+    },
+    "software": {
+      "$ref": "Text.schema.json"
+    },
+    "version": {
+      "$ref": "Text.schema.json"
+    },
+    "parameters": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "maxProperties": 32
+    }
+  },
+  "additionalProperties": false
+}

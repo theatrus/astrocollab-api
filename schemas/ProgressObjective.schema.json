@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/ProgressObjective.schema.json",
+  "title": "ProgressObjective",
+  "type": "object",
+  "required": [
+    "objective_id",
+    "goal",
+    "assigned_frames",
+    "reported_frames",
+    "pending_frames",
+    "accepted_frames",
+    "accepted_integration_seconds",
+    "rejected_frames",
+    "surplus_frames",
+    "complete"
+  ],
+  "properties": {
+    "objective_id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "goal": {
+      "$ref": "Goal.schema.json"
+    },
+    "assigned_frames": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Frames in unexpired assignments."
+    },
+    "reported_frames": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Frames rigs report as captured but not yet submitted. They earn no credit until accepted."
+    },
+    "pending_frames": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Frames uploaded and not yet assessed."
+    },
+    "accepted_frames": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "accepted_integration_seconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "rejected_frames": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "surplus_frames": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Accepted after the goal was met; credited to the contributor, not to the goal."
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "True when every panel of the target has the goal's depth."
+    }
+  },
+  "additionalProperties": false
+}

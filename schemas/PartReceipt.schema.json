@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/PartReceipt.schema.json",
+  "title": "PartReceipt",
+  "type": "object",
+  "required": [
+    "part_number",
+    "size_bytes",
+    "sha256"
+  ],
+  "properties": {
+    "part_number": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "sha256": {
+      "$ref": "Sha256.schema.json"
+    }
+  },
+  "additionalProperties": false
+}

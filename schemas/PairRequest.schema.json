@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/PairRequest.schema.json",
+  "title": "PairRequest",
+  "type": "object",
+  "required": [
+    "pairing_code",
+    "installation_id",
+    "client_name"
+  ],
+  "properties": {
+    "pairing_code": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 256,
+      "description": "Single-use code the user issued on the account pages."
+    },
+    "installation_id": {
+      "$ref": "Uuid.schema.json",
+      "description": "Persistent ID of this client installation. Pairing again replaces its old key."
+    },
+    "client_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "Name shown on the account pages, such as \"Roof rig 2\"."
+    }
+  },
+  "description": "Trade a pairing code from the account pages for an API key.",
+  "additionalProperties": false
+}

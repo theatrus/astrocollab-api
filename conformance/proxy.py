@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
-import hashlib
 import http.client
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -32,24 +31,12 @@ class Recorder:
     requests: int = 0
     client: list[dict[str, Any]] = field(default_factory=list)
     server: list[dict[str, Any]] = field(default_factory=list)
-    keys: dict[tuple[str, str, str, str], str] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def add(self, side: str, method: str, path: str, issues: list[str]) -> None:
         with self.lock:
             target = self.client if side == "client" else self.server
             target += [{"request": f"{method} {path.split('?')[0]}", "issue": i} for i in issues]
-
-    def idempotency(self, method: str, path: str, headers: dict[str, str], body: bytes) -> list[str]:
-        """A client must not reuse an Idempotency-Key with a different body."""
-        key = headers.get("idempotency-key")
-        if method != "POST" or not key:
-            return []
-        scope = (headers.get("authorization", ""), method, path.split("?")[0], key)
-        digest = hashlib.sha256(body).hexdigest()
-        with self.lock:
-            previous = self.keys.setdefault(scope, digest)
-        return [] if previous == digest else ["reused an Idempotency-Key with a different body"]
 
     def report(self) -> dict[str, Any]:
         with self.lock:
@@ -81,7 +68,6 @@ def make_proxy(listen: tuple[str, int], upstream: str, contract: Contract,
             with recorder.lock:
                 recorder.requests += 1
             issues = contract.check_request(self.command, relative, headers, body)
-            issues += recorder.idempotency(self.command, relative, headers, body)
             if "?" in relative and any(word in relative.lower() for word in ("key=", "token=", "authorization=")):
                 issues.append("credential-like value in the URL")
             recorder.add("client", self.command, relative, issues)
@@ -150,9 +136,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-http-loopback", action="store_true",
                         help="accept http:// URLs on localhost, for local test servers")
     parser.add_argument("--report", help="write the report as JSON to this file")
+    parser.add_argument("--schemas", help="validate bodies against standalone JSON Schemas in this directory")
     args = parser.parse_args(argv)
     host, _, port = args.listen.rpartition(":")
-    server, recorder = make_proxy((host, int(port)), args.upstream, Contract(allow_http_loopback=args.allow_http_loopback))
+    contract = Contract(allow_http_loopback=args.allow_http_loopback, schema_dir=args.schemas)
+    server, recorder = make_proxy((host, int(port)), args.upstream, contract)
     prefix = urlsplit(args.upstream.rstrip("/")).path
     print(f"Point the client at http://{host}:{server.server_address[1]}{prefix}. Press Ctrl-C to stop.",
           flush=True)

@@ -4,16 +4,6 @@
   "account_id": "00000000-0000-4000-8000-000000000002",
   "client_name": "Roof rig 2",
   "installation_id": "00000000-0000-4000-8000-000000000020",
-  "scopes": [
-    "account:read",
-    "participation:manage",
-    "project:read",
-    "offer:write",
-    "intent:write",
-    "status:write",
-    "submission:write",
-    "submission:read-own"
-  ],
   "project_ids": [
     "00000000-0000-4000-8000-000000000001"
   ]

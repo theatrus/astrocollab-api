@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Equipment.schema.json",
+  "title": "Equipment",
+  "type": "object",
+  "required": [
+    "id",
+    "account_id",
+    "revision",
+    "observed_at",
+    "configuration"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "account_id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Rises when the configuration changes. Plans and submissions cite it."
+    },
+    "observed_at": {
+      "$ref": "Timestamp.schema.json"
+    },
+    "configuration": {
+      "$ref": "EquipmentInput.schema.json"
+    }
+  },
+  "description": "A registered rig. Each paired installation usually registers one.",
+  "additionalProperties": false
+}

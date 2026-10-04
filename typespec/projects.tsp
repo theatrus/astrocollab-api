@@ -21,10 +21,13 @@ model Target {
   footprint: Footprint;
 }
 
+/** A passband: a named center wavelength, with its width when known. */
 model Bandpass {
   @minLength(1) @maxLength(80) name: string;
   @minValue(100) @maxValue(30000) center_nm: numeric;
-  @maxValue(30000) @minValueExclusive(0) width_nm: numeric;
+
+  /** Full width at half maximum. In an objective, the widest band accepted. */
+  @maxValue(30000) @minValueExclusive(0) width_nm?: numeric;
 }
 
 /** Inclusive range. Server MUST enforce min <= max. */
@@ -70,7 +73,10 @@ model Objective {
   id: Uuid;
   target_id: Uuid;
   processing_group_id: Uuid;
-  bandpass: Bandpass;
+
+  /** Accepted passbands. A frame qualifies when one of its passbands matches one of these. */
+  @minItems(1) @maxItems(8) bandpasses: Bandpass[];
+
   purpose: "deep" | "short_dynamic_range" | "continuum" | "other";
   exposure: ExposureRange;
   goal: Goal;
@@ -87,26 +93,44 @@ model Terms {
   sha256: Sha256;
 }
 
+@extension("allOf", #[
+  #{
+    `if`: #{properties: #{deliverable: #{`const`: "stacked_masters"}}},
+    `then`: #{required: #["master_rules"]},
+    `else`: #{not: #{required: #["master_rules"]}}
+  }
+])
+/** What the project needs. Owners set it with the server's own tools. */
 model RequirementSet {
   @minLength(1) @maxLength(200) title: string;
   description: Text;
-  visibility: "public" | "members";
-  enrollment: "open" | "approval_required";
-  state: "open" | "paused" | "closed";
   @minItems(1) @maxItems(100) targets: Target[];
   @minItems(1) @maxItems(100) processing_groups: ProcessingGroup[];
   @minItems(1) @maxItems(100) objectives: Objective[];
   terms: Terms;
   capture_deadline: Timestamp;
   submission_deadline: Timestamp;
-  surplus_policy: "retain_and_attribute" | "reject_excess";
-  @minValue(1) acceptance_policy_revision: integer;
   @minItems(0) @maxItems(32) required_features: FeatureName[];
+
+  /** What contributors submit: calibrated subs, or masters they stack themselves. */
+  deliverable: "calibrated_subs" | "stacked_masters";
+
+  /** Rules for stacked masters. Required when `deliverable` is `stacked_masters`. */
+  master_rules?: MasterRules;
 
   /** Present when the project accepts files shared outside the API. */
   external_delivery?: ExternalDelivery;
 
   @extension("propertyNames", #{pattern: "^[a-z0-9]+(?:[.-][a-z0-9]+)+$"}) @extension("maxProperties", 32) extensions?: Record<unknown>;
+}
+
+/** What a stacked master must meet, beyond the objective's own rules. */
+model MasterRules {
+  /** Fewest subs one master may combine. */
+  @minValue(1) @maxValue(5000) min_sub_count: integer;
+
+  /** Whether drizzled masters are accepted. Sampling rules apply to the master's pixels. */
+  allow_drizzle: boolean;
 }
 
 /** File-sharing services a project accepts, and how contributors should share. */
@@ -126,186 +150,82 @@ union ExternalProvider {
   "https",
 }
 
-model ProjectCreate {
-  id: Uuid;
-  requirements: RequirementSet;
-}
-
+/** A project and its current requirements. */
 model Project {
   id: Uuid;
-  owner_account_id: Uuid;
   title: Text;
-  visibility: "public" | "members";
-  state: "draft" | "open" | "paused" | "closed";
-  @minValue(1) current_revision: integer | null;
-  updated_at: Timestamp;
-}
+  state: "open" | "paused" | "closed";
 
-model ProjectDraft {
-  project_id: Uuid;
-  @minValue(1) draft_revision: integer;
-  requirements: RequirementSet;
-}
-
-model ProjectRevision {
-  project_id: Uuid;
+  /** Rises each time the owners publish new requirements. Submissions cite it. */
   @minValue(1) revision: integer;
+
   published_at: Timestamp;
   requirements: RequirementSet;
 }
 
-model ProjectCreated {
-  project: Project;
-  owner_participation: Participation;
+/** A project the account has joined, and the account's standing in it. */
+model MyProject {
+  project_id: Uuid;
+  title: Text;
+  state: "open" | "paused" | "closed";
+
+  /** Only `active` members can submit or receive assignments. */
+  membership: "requested" | "active" | "paused" | "withdrawn" | "revoked";
 }
 
-model ProjectPage {
-  @minItems(0) @maxItems(100) items: Project[];
+model MyProjectPage {
+  @minItems(0) @maxItems(100) items: MyProject[];
   @maxLength(4096) next_cursor: string | null;
 }
 
-model TargetPage {
-  @minItems(0) @maxItems(100) items: Target[];
-  @maxLength(4096) next_cursor: string | null;
+model ProgressObjective {
+  objective_id: Uuid;
+  goal: Goal;
+
+  /** Frames in unexpired assignments. */
+  @minValue(0) assigned_frames: integer;
+
+  /** Frames rigs report as captured but not yet submitted. They earn no credit until accepted. */
+  @minValue(0) reported_frames: integer;
+
+  /** Frames uploaded and not yet assessed. */
+  @minValue(0) pending_frames: integer;
+
+  @minValue(0) accepted_frames: integer;
+  @minValue(0) accepted_integration_seconds: numeric;
+  @minValue(0) rejected_frames: integer;
+
+  /** Accepted after the goal was met; credited to the contributor, not to the goal. */
+  @minValue(0) surplus_frames: integer;
+
+  /** True when every panel of the target has the goal's depth. */
+  complete: boolean;
 }
 
-model ObjectivePage {
-  @minItems(0) @maxItems(100) items: Objective[];
-  @maxLength(4096) next_cursor: string | null;
+/** How far the shared picture has come. Counts are subs, whether sent alone or in masters. */
+model Progress {
+  project_id: Uuid;
+  @minValue(1) revision: integer;
+  as_of: Timestamp;
+  @minItems(0) @maxItems(100) objectives: ProgressObjective[];
+  @minValue(0) accepted_frames: integer;
+  @minValue(0) accepted_integration_seconds: numeric;
 }
 
-/**
- * Anonymous requests see public listings. An optional account bearer token with account:read
- * also exposes that account's memberships; invalid supplied credentials return 401.
- */
-@summary("List visible projects")
-@access("public_or_account")
-@useAuth(NoAuth | bearerAuth)
+/** Join projects on the server's web pages. */
+@summary("List the projects you have joined")
 @tag("projects")
-@get @route("/projects")
-op listProjects(
-  ...Paging
-): Ok<ProjectPage> | Errors;
+@get @route("/me/projects")
+op listMyProjects(...Paging): Ok<MyProjectPage> | Errors;
 
-@summary("Create a draft project and owner membership")
-@access("account", "project:create")
-@tag("projects")
-@post @route("/projects")
-op createProject(
-  ...IdempotencyKey,
-  @body body: ProjectCreate
-): Created<ProjectCreated> | WriteErrors;
-
-/**
- * Public summaries allow anonymous reads; private summaries require a project token.
- * Account-authorized sync separately returns selected project metadata.
- */
-@summary("Read a visible project summary")
-@access("public_or_project", "project:read")
+@summary("Read a project's requirements")
 @useAuth(NoAuth | bearerAuth)
 @tag("projects")
 @get @route("/projects/{project_id}")
-op getProject(
-  @path project_id: Uuid,
-  ...ConditionalRead
-): Ok<Project> | NotModified | Errors;
+op getProject(@path project_id: Uuid): Ok<Project> | Errors;
 
-@summary("Read the current owner draft")
-@access("project", "project:manage")
-@tag("projects")
-@get @route("/projects/{project_id}/draft")
-op getDraft(
-  @path project_id: Uuid,
-  ...ConditionalRead
-): Ok<ProjectDraft> | NotModified | Errors;
-
-@summary("Replace the complete project draft")
-@access("project", "project:manage")
-@tag("projects")
-@put @route("/projects/{project_id}/draft")
-op replaceDraft(
-  @path project_id: Uuid,
-  ...IfMatch,
-  @body body: RequirementSet
-): Ok<ProjectDraft> | ConditionalWriteErrors;
-
-@summary("Publish the draft as an immutable revision")
-@access("project", "project:manage")
-@tag("projects")
-@post @route("/projects/{project_id}/publish")
-op publishProject(
-  @path project_id: Uuid,
-  ...IdempotencyKey,
-  ...IfMatch
-): Created<ProjectRevision> | ConditionalWriteErrors;
-
-@summary("Read immutable published requirements")
-@access("public_or_project", "project:read")
+@summary("Read a project's progress")
 @useAuth(NoAuth | bearerAuth)
 @tag("projects")
-@get @route("/projects/{project_id}/revisions/{revision}")
-op getProjectRevision(
-  @path project_id: Uuid,
-  @path @minValue(1) revision: integer,
-  ...ConditionalRead
-): Ok<ProjectRevision> | NotModified | Errors;
-
-@summary("Read targets from an exact published revision")
-@access("public_or_project", "project:read")
-@useAuth(NoAuth | bearerAuth)
-@tag("projects")
-@get @route("/projects/{project_id}/targets")
-op listTargets(
-  @path project_id: Uuid,
-  ...RevisionQuery,
-  ...Paging
-): Ok<TargetPage> | Errors;
-
-@summary("Read objectives from a published revision")
-@access("public_or_project", "project:read")
-@useAuth(NoAuth | bearerAuth)
-@tag("projects")
-@get @route("/projects/{project_id}/objectives")
-op listObjectives(
-  @path project_id: Uuid,
-  ...RevisionQuery,
-  ...Paging
-): Ok<ObjectivePage> | Errors;
-
-@summary("Volunteer and accept current project terms")
-@access("account", "participation:manage")
-@tag("projects")
-@post @route("/projects/{project_id}/participations")
-op joinProject(
-  @path project_id: Uuid,
-  ...IdempotencyKey,
-  @body body: JoinRequest
-): Created<Participation> | WriteErrors;
-
-@summary("List project membership requests for review")
-@access("project", "participation:review")
-@tag("projects")
-@get @route("/projects/{project_id}/participations")
-op listProjectParticipations(
-  @path project_id: Uuid,
-  ...Paging
-): Ok<ParticipationPage> | Errors;
-
-@summary("Register an immutable manifest and resumable uploads")
-@access("project", "submission:write")
-@tag("projects")
-@post @route("/projects/{project_id}/submissions")
-op createSubmission(
-  @path project_id: Uuid,
-  ...IdempotencyKey,
-  @body body: SubmissionCreate
-): Created<Submission> | WriteErrors;
-
-@summary("List submissions for maintainer assessment")
-@access("project", "submission:read-all")
-@tag("projects")
-@get @route("/projects/{project_id}/submissions")
-op listProjectSubmissions(
-  @path project_id: Uuid,
-  ...Paging
-): Ok<SubmissionPage> | Errors;
+@get @route("/projects/{project_id}/progress")
+op getProgress(@path project_id: Uuid): Ok<Progress> | Errors;

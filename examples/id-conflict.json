@@ -1,0 +1,8 @@
+{
+  "type": "https://collab.example/problems/id-conflict",
+  "title": "ID conflict",
+  "status": 409,
+  "code": "id_conflict",
+  "detail": "This ID already names a record with different content.",
+  "request_id": "00000000-0000-4000-8000-000000000090"
+}

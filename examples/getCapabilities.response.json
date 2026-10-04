@@ -5,9 +5,7 @@
     "v1"
   ],
   "spec_version": "0.1.0-draft.1",
-  "features": [
-    "recommendations"
-  ],
+  "features": [],
   "account_url": "https://collab.example/account",
   "artifact_formats": [
     "fits",
@@ -18,9 +16,6 @@
     "max_artifacts_per_submission": 100,
     "max_artifact_bytes": 2147483648,
     "max_chunk_bytes": 8388608,
-    "idempotency_retention_seconds": 86400,
-    "snapshot_ttl_seconds": 900,
-    "change_retention_seconds": 2592000,
     "upload_staging_seconds": 604800,
     "max_decoded_pixels": 200000000
   }

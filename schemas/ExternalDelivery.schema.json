@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/ExternalDelivery.schema.json",
+  "title": "ExternalDelivery",
+  "type": "object",
+  "required": [
+    "providers",
+    "instructions"
+  ],
+  "properties": {
+    "providers": {
+      "type": "array",
+      "items": {
+        "$ref": "ExternalProvider.schema.json"
+      },
+      "minItems": 1,
+      "maxItems": 6,
+      "uniqueItems": true
+    },
+    "instructions": {
+      "$ref": "Text.schema.json",
+      "description": "For example: \"Share files with collab"
+    }
+  },
+  "description": "File-sharing services a project accepts, and how contributors should share.",
+  "additionalProperties": false
+}

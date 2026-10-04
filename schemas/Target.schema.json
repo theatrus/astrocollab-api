@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Target.schema.json",
+  "title": "Target",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "footprint"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "footprint": {
+      "$ref": "Footprint.schema.json"
+    }
+  },
+  "additionalProperties": false
+}

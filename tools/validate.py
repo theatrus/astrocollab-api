@@ -8,6 +8,7 @@ import re
 
 from jsonschema import Draft202012Validator, FormatChecker
 from openapi_spec_validator import validate
+from referencing import Registry, Resource
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,20 +78,20 @@ def main() -> None:
             oid = operation["operationId"]
             assert oid not in operation_ids, f"Duplicate operation ID: {oid}"
             operation_ids.add(oid)
-            assert operation["x-token-context"] in {"public", "public_or_project", "public_or_account", "account_or_project", "account", "project"}
-            assert "x-required-scopes" in operation
+            # Every operation states whether it needs an API key.
+            assert "security" in operation or "security" in DOC, oid
             parameters = [
                 DOC["components"]["parameters"][p["$ref"].split("/")[-1]]
                 if "$ref" in p else p for p in operation.get("parameters", [])
             ]
             declared = {p["name"] for p in parameters if p["in"] == "path"}
             assert declared == set(re.findall(r"{([^}]+)}", path)), oid
-            # Pairing codes are single use; a replayed pairing response would leak a key.
-            if method == "post" and oid != "pairClient":
-                assert any(p["name"] == "Idempotency-Key" and p["required"] for p in parameters), oid
+            # Mutations are safe to retry by design; the protocol has no idempotency keys.
+            assert not any(p["name"] == "Idempotency-Key" for p in parameters), oid
             payloads = []
             if "requestBody" in operation:
-                content = operation["requestBody"]["content"].get("application/json")
+                content = (operation["requestBody"]["content"].get("application/json")
+                           or operation["requestBody"]["content"].get("application/merge-patch+json"))
                 if content:
                     payloads.append(("request", content))
             for status, response in operation["responses"].items():
@@ -127,6 +128,20 @@ def main() -> None:
             case["name"], [(e.validator, e.message) for e in errors]
         )
 
+    # The standalone JSON Schemas must accept every example without OpenAPI tooling.
+    standalone = {}
+    for file in (ROOT / "schemas").glob("*.schema.json"):
+        schema = json.loads(file.read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
+        standalone[schema["$id"]] = Resource.from_contents(schema)
+    registry = Registry().with_resources(standalone.items())
+    base = "https://theatrus.github.io/astrocollab-api/schemas/"
+    for entry in manifest:
+        schema = standalone[f"{base}{entry['schema']}.schema.json"].contents
+        value = fixtures[entry["file"]][1]
+        errors = list(Draft202012Validator(schema, registry=registry, format_checker=FORMATS).iter_errors(value))
+        assert not errors, f"{entry['file']} fails standalone schema: {errors[0].message}"
+
     # Local Markdown link checks; external URLs are references, not fetched by CI.
     for file in ROOT.rglob("*.md"):
         if ".venv" in file.parts or "node_modules" in file.parts:
@@ -137,7 +152,8 @@ def main() -> None:
                 continue
             assert (file.parent / target).exists(), f"Broken link: {file}: {target}"
 
-    print(f"Validated OpenAPI, {len(operation_ids)} operations, {len(SCHEMAS)} schemas, "
+    print(f"Validated OpenAPI, {len(operation_ids)} operations, {len(SCHEMAS)} schemas "
+          f"(also as standalone JSON Schemas), "
           f"{len(manifest)} payloads and {len(negatives)} rejection fixtures.")
     print("Stateful authorization, concurrency and astronomy remain implementation conformance work.")
 

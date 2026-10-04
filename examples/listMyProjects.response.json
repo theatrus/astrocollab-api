@@ -1,0 +1,11 @@
+{
+  "items": [
+    {
+      "project_id": "00000000-0000-4000-8000-000000000001",
+      "title": "M31 deep H-alpha",
+      "state": "open",
+      "membership": "active"
+    }
+  ],
+  "next_cursor": null
+}

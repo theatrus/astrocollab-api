@@ -1,12 +1,13 @@
-"""Build openapi/astrocollab.yaml from the TypeSpec source and JSON examples.
+"""Build the contract from the TypeSpec source and JSON examples.
 
-Run `npm ci` in typespec/ first. The script compiles TypeSpec, then:
+Run `npm ci` in typespec/ first. The script compiles TypeSpec, then writes:
 
-- closes every object schema (servers reject unknown fields);
-- adds request and response examples from examples/manifest.json, so each
-  example lives in one file.
+- openapi/astrocollab.yaml, with every object schema closed (servers reject
+  unknown fields) and examples taken from examples/manifest.json;
+- schemas/*.schema.json, standalone JSON Schemas for every type;
+- spec/api.md, a Markdown REST reference.
 
-Pass --check to fail when the committed contract differs from a fresh build.
+Pass --check to fail when any committed output differs from a fresh build.
 """
 from __future__ import annotations
 
@@ -17,16 +18,18 @@ import sys
 
 import yaml
 
+from contract_docs import json_schemas, rest_reference
+
 ROOT = Path(__file__).resolve().parents[1]
 TYPESPEC = ROOT / "typespec"
 EMITTED = TYPESPEC / "tsp-output/openapi.yaml"
 TARGET = ROOT / "openapi/astrocollab.yaml"
+SCHEMAS = ROOT / "schemas"
+REFERENCE = ROOT / "spec/api.md"
 HEADER = "# Generated from typespec/ by tools/build_openapi.py. Do not edit.\n"
 PROBLEM_EXAMPLES = {
     "default": "invalid-request.json",
-    "409": "idempotency-conflict.json",
-    "412": "precondition-failed.json",
-    "428": "precondition-required.json",
+    "409": "id-conflict.json",
     "429": "rate-limited.json",
 }
 # Operations whose typical conflict differs from the default.
@@ -59,10 +62,17 @@ def add_examples(doc: dict) -> None:
         op = operations[entry["operationId"]]
         value = json.loads((examples / entry["file"]).read_text(encoding="utf-8"))
         if entry["direction"] == "request":
-            media = op["requestBody"]["content"]["application/json"]
+            # JSON bodies use application/json, except merge patches.
+            media = next(iter(op["requestBody"]["content"].values()))
         else:
             media = op["responses"][str(entry["status"])]["content"]["application/json"]
         media["examples"] = {"example": {"value": value}}
+    for op in operations.values():
+        # A repeated create returns the existing record with 200; reuse the 201 example.
+        created = op["responses"].get("201", {}).get("content", {}).get("application/json")
+        repeated = op["responses"].get("200", {}).get("content", {}).get("application/json")
+        if created and repeated and "examples" not in repeated and "examples" in created:
+            repeated["examples"] = created["examples"]
     for oid, op in operations.items():
         for status, response in op["responses"].items():
             media = response.get("content", {}).get("application/problem+json")
@@ -74,7 +84,8 @@ def add_examples(doc: dict) -> None:
             media["example"] = json.loads((examples / name).read_text(encoding="utf-8"))
 
 
-def build() -> str:
+def build() -> dict[Path, str]:
+    """Return every generated file and its text."""
     subprocess.run(["npx", "--no-install", "tsp", "compile", "."], cwd=TYPESPEC, check=True,
                    stdout=subprocess.DEVNULL)
     doc = yaml.safe_load(EMITTED.read_text(encoding="utf-8"))
@@ -82,18 +93,29 @@ def build() -> str:
     for item in doc["paths"].values():
         close_objects(item)
     add_examples(doc)
-    return HEADER + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100)
+    outputs = {TARGET: HEADER + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100)}
+    outputs.update({SCHEMAS / name: text for name, text in json_schemas(doc).items()})
+    outputs[REFERENCE] = rest_reference(doc, ROOT / "examples")
+    return outputs
 
 
 def main() -> None:
-    text = build()
+    outputs = build()
+    stale_schemas = {p for p in SCHEMAS.glob("*.json")} - set(outputs)
     if "--check" in sys.argv:
-        if TARGET.read_text(encoding="utf-8") != text:
-            raise SystemExit("openapi/astrocollab.yaml is stale; run python tools/build_openapi.py")
-        print("OpenAPI contract matches the TypeSpec source.")
+        stale = [p for p, text in outputs.items() if not p.exists() or p.read_text(encoding="utf-8") != text]
+        stale += sorted(stale_schemas)
+        if stale:
+            names = ", ".join(str(p.relative_to(ROOT)) for p in stale)
+            raise SystemExit(f"Generated files are stale ({names}); run python tools/build_openapi.py")
+        print("OpenAPI, JSON Schemas and REST reference match the TypeSpec source.")
         return
-    TARGET.write_text(text, encoding="utf-8")
-    print(f"Wrote {TARGET.relative_to(ROOT)}")
+    SCHEMAS.mkdir(exist_ok=True)
+    for path in stale_schemas:
+        path.unlink()
+    for path, text in outputs.items():
+        path.write_text(text, encoding="utf-8")
+    print(f"Wrote OpenAPI, {len(outputs) - 2} schema files and the REST reference.")
 
 
 if __name__ == "__main__":

@@ -1,15 +1,14 @@
-"""Walk through the AstroCollab flow against a running server.
+"""Walk through the AstroCollab contributor API against a running server.
 
-The owner publishes a project. A participant joins, offers equipment and time,
-checks in, uploads one calibrated exposure and reads the credit. Request
-bodies come from examples/; the client swaps in fresh IDs and current dates so
-that it can run more than once.
+A contributor pairs (or uses a key), lists their projects, describes a rig,
+checks in for an assignment, submits one calibrated exposure, and reads the
+credit. The manifest comes from examples/; the client fills in the IDs the
+server handed out.
 
-    python -m reference.client --api-root http://127.0.0.1:8080/v1 \\
-        --owner-key OWNER_SECRET --participant-key ALICE_SECRET
+    python -m reference.client --api-root http://127.0.0.1:8080/v1 --key ALICE_SECRET
 
-Use --owner-pairing-code and --participant-pairing-code (or --pairing-code)
-to pair first instead of passing keys.
+Use --pairing-code instead of --key to pair first. With --sample, three rigs
+check in and the client prints what each should image.
 """
 from __future__ import annotations
 
@@ -25,14 +24,14 @@ import uuid
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 
-# Example IDs that must be new on each run.
-FRESH = {
-    "00000000-0000-4000-8000-000000000001": "project",
-    "00000000-0000-4000-8000-000000000007": "equipment",
-    "00000000-0000-4000-8000-000000000010": "capture",
-    "00000000-0000-4000-8000-000000000011": "artifact",
-    "00000000-0000-4000-8000-000000000012": "submission",
-}
+RIGS = [
+    # A 400 mm f/5 refractor and two 2000 mm SCTs, all with a 6248×4176 3.76 µm mono camera.
+    ("Rig 400 mm", 400),
+    ("Rig 2000 mm A", 2000),
+    ("Rig 2000 mm B", 2000),
+]
+FILTERS = [("H-alpha", "narrowband", 656.3, 3.0), ("OIII", "narrowband", 500.7, 3.0),
+           ("Luminance", "luminance", 550.0, 300.0)]
 
 
 class ApiError(Exception):
@@ -52,125 +51,165 @@ class Client:
         headers = dict(headers or {})
         if self.key:
             headers["Authorization"] = f"Bearer {self.key}"
-        if method == "POST" and self.key:  # Every authenticated POST needs a key.
-            headers.setdefault("Idempotency-Key", str(uuid.uuid4()))  # New key per new action.
         data = raw
         if body is not None:
             data = json.dumps(body).encode()
-            headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(self.api_root + path, data=data, method=method,
-                                         headers=headers)
+            headers.setdefault("Content-Type", "application/json")
+        request = urllib.request.Request(self.api_root + path, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(request) as response:
-                status, text, etag = response.status, response.read(), response.headers.get("ETag")
+                status, text = response.status, response.read()
         except urllib.error.HTTPError as error:
             with error:
                 text = error.read()
             self.log(f"{method} {path} -> {error.code}  {note}")
             raise ApiError(error.code, json.loads(text or b"{}")) from None
         self.log(f"{method} {path} -> {status}  {note}")
-        return (json.loads(text) if text else None), etag
+        return json.loads(text) if text else None
 
 
 def pair(api_root: str, code: str, client_name: str, log=print) -> str:
     """Trade a pairing code for an API key. Real clients keep installation_id
     and the key in a credential store; pairing again replaces the old key."""
     body = {"pairing_code": code, "installation_id": str(uuid.uuid4()), "client_name": client_name}
-    paired, _ = Client(api_root, None, log).call("POST", "/pair", body,
-                                                  "Pair this client; receive an API key once.")
+    paired = Client(api_root, None, log).call("POST", "/pair", body, "Pair; receive an API key once.")
     return paired["api_key"]
 
 
-def example(name: str, ids: dict) -> dict:
-    text = (EXAMPLES / name).read_text(encoding="utf-8")
-    for old, new in ids.items():
-        text = text.replace(old, new)
-    return json.loads(text)
+def example(name: str) -> dict:
+    return json.loads((EXAMPLES / name).read_text(encoding="utf-8"))
 
 
 def stamp(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def run(api_root: str, owner_key: str, participant_key: str, log=print) -> dict:
-    """Run the whole flow. Returns the final project progress."""
-    owner, alice = Client(api_root, owner_key, log), Client(api_root, participant_key, log)
-    ids = {old: str(uuid.uuid4()) for old in FRESH}
+def rig(name: str, focal_mm: float, filter_ids: list) -> dict:
+    return {
+        "name": name, "sensor_width_pixels": 6248, "sensor_height_pixels": 4176,
+        "pixel_size_um": 3.76, "focal_length_mm": focal_mm, "color_state": "mono",
+        "rotation": "fixed", "confirmed_position_angle_degrees": 0,
+        "filters": [{"id": fid, "name": n, "kind": kind,
+                     "bandpasses": [{"name": n, "center_nm": c, "width_nm": w}]}
+                    for fid, (n, kind, c, w) in zip(filter_ids, FILTERS)],
+    }
+
+
+def run(api_root: str, key: str, log=print) -> dict:
+    """Run the walkthrough. Returns the project's progress at the end."""
+    me = Client(api_root, key, log)
     now = datetime.now(timezone.utc).replace(microsecond=0)
 
-    log("\n# Discover the server")
-    capabilities, _ = alice.call("GET", "/capabilities", note="Read limits and features.")
+    log("\n# Discover the server and your projects")
+    me.call("GET", "/capabilities", note="Read limits.")
+    projects = me.call("GET", "/me/projects", note="List the projects you joined on the web.")
+    project_id = next(p["project_id"] for p in projects["items"] if p["title"] == "Sample sky survey")
+    project = me.call("GET", f"/projects/{project_id}", note="Read the requirements.")
 
-    log("\n# Owner: publish the project")
-    create = example("createProject.request.json", ids)
-    create["requirements"]["capture_deadline"] = stamp(now + timedelta(days=30))
-    create["requirements"]["submission_deadline"] = stamp(now + timedelta(days=45))
-    created, _ = owner.call("POST", "/projects", create, "Create a draft and owner membership.")
-    project_id = created["project"]["id"]
-    _, draft_etag = owner.call("GET", f"/projects/{project_id}/draft", note="Read the draft ETag.")
-    revision, _ = owner.call("POST", f"/projects/{project_id}/publish",
-                             headers={"If-Match": draft_etag}, note="Publish revision 1.")
+    log("\n# Describe the rig")
+    equipment_id = str(uuid.uuid4())
+    config = rig("Rig 400 mm", 400, [str(uuid.uuid4()) for _ in FILTERS])
+    equipment = me.call("PUT", f"/me/equipment/{equipment_id}", config,
+                        "Describe the camera, telescope and filters once.")
 
-    log("\n# Participant: join")
-    terms = revision["requirements"]["terms"]
-    part, _ = alice.call("POST", f"/projects/{project_id}/participations", {"accepted_terms": terms},
-                         "Join with consent to the current terms.")
-    pid = part["id"]
-    ids["00000000-0000-4000-8000-000000000003"] = pid
+    log("\n# Ask what to image")
+    result = me.call("POST", "/me/checkins", {"equipment_id": equipment_id,
+                                              "project_ids": [project_id], "observed_at": stamp(now)},
+                     "Check in; the server assigns a panel.")
+    assignment = result["assignment"]
+    panel = assignment["panels"][0]
+    for line in describe("Rig 400 mm", result, config):
+        log(f"  {line}")
 
-    log("\n# Participant: offer equipment and time")
-    equipment_id = ids["00000000-0000-4000-8000-000000000007"]
-    registered, _ = alice.call("PUT", f"/participations/{pid}/equipment/{equipment_id}",
-                               example("registerEquipment.request.json", ids),
-                               "Register the camera and telescope.", {"If-None-Match": "*"})
-    capacity = example("setCapacity.request.json", ids)
-    capacity.update(month=now.strftime("%Y-%m"), usage_observed_at=stamp(now), availability=[
-        {"start": stamp(now + timedelta(hours=2)), "end": stamp(now + timedelta(hours=7))}])
-    alice.call("PUT", f"/participations/{pid}/capacity", capacity,
-               "Offer 10 rig-hours this month.", {"If-None-Match": "*"})
-    policy = example("setPlanningPolicy.request.json", ids)
-    policy["accepted_terms"] = terms
-    alice.call("PUT", f"/participations/{pid}/planning-policy", policy,
-               "Save the sky regions and limits the user approved.", {"If-None-Match": "*"})
-    checkin = example("checkIn.request.json", ids)
-    checkin["observed_at"] = stamp(now)
-    advice, _ = alice.call("POST", f"/participations/{pid}/checkins", checkin,
-                           "Check in; the server answers with planning advice.")
-    log(f"  advice: {advice['action']}")
-
-    log("\n# Participant: submit one calibrated exposure")
+    log("\n# Submit one calibrated exposure")
     data = synthetic_frame(2_500_000)
     digest = hashlib.sha256(data).hexdigest()
-    manifest = example("createSubmission.request.json", ids)
+    objective = next(o for o in project["requirements"]["objectives"] if o["id"] in panel["objective_ids"])
+    used = next(f for f in config["filters"] if f["id"] == panel["filter_id"])
+    manifest = example("createSubmission.request.json")
     artifact = manifest["artifacts"][0]
-    for field in ("recommendation_id", "panel_id"):  # This run used no recommendation.
-        artifact.pop(field)
-    artifact.update(size_bytes=len(data), sha256=digest, captured_at=stamp(now - timedelta(hours=1)))
-    artifact["solve"]["artifact_sha256"] = digest
-    submission, _ = alice.call("POST", f"/projects/{project_id}/submissions", manifest,
-                               "Send the manifest; get an upload session.")
+    artifact.update(
+        id=str(uuid.uuid4()), capture_id=str(uuid.uuid4()), objective_ids=panel["objective_ids"],
+        processing_group_id=objective["processing_group_id"],
+        equipment={"equipment_id": equipment_id, "revision": equipment["revision"]},
+        filter_id=used["id"], bandpasses=used["bandpasses"], exposure_seconds=panel["exposure_seconds"],
+        captured_at=stamp(now - timedelta(hours=1)), size_bytes=len(data), sha256=digest,
+        assignment_id=assignment["id"], panel_id=panel["id"])
+    artifact["solve"].update(artifact_sha256=digest, center=panel["footprint"]["center"])
+    manifest.update(id=str(uuid.uuid4()), project_revision=assignment["project_revision"])
+    submission = me.call("POST", f"/projects/{project_id}/submissions", manifest,
+                         "Send the manifest; get an upload session.")
     upload = submission["uploads"][0]
     size = upload["part_size_bytes"]
     for number in reversed(range(1, upload["part_count"] + 1)):  # Order does not matter.
         part_bytes = data[(number - 1) * size:number * size]
-        alice.call("PUT", f"/uploads/{upload['id']}/parts/{number}", raw=part_bytes,
-                   headers={"Content-Type": "application/octet-stream",
-                            "X-Part-SHA256": hashlib.sha256(part_bytes).hexdigest()},
-                   note=f"Upload part {number} of {upload['part_count']}.")
-    job, _ = alice.call("POST", f"/submissions/{submission['id']}/finalize",
-                        note="Finalize; the server queues assessment.")
-    while job["state"] in ("queued", "running"):
-        time.sleep(job["poll_after_seconds"])
-        job, _ = alice.call("GET", f"/jobs/{job['id']}", note=f"Poll the job.")
-    result = job["result"]["artifacts"][0]
-    log(f"  artifact: {result['state']} {result['reason_codes'] or ''}")
+        me.call("PUT", f"/uploads/{upload['id']}/parts/{number}", raw=part_bytes,
+                headers={"Content-Type": "application/octet-stream",
+                         "X-Part-SHA256": hashlib.sha256(part_bytes).hexdigest()},
+                note=f"Upload part {number} of {upload['part_count']}.")
+    submission = me.call("POST", f"/submissions/{submission['id']}/finalize",
+                         note="Finalize; the server starts assessment.")
+    while submission["state"] != "complete":
+        time.sleep(0.5)
+        submission = me.call("GET", f"/submissions/{submission['id']}", note="Poll until complete.")
+    outcome = submission["artifacts"][0]
+    log(f"  artifact: {outcome['state']} {outcome['reason_codes'] or ''}")
 
-    log("\n# Anyone: read progress")
-    progress, _ = alice.call("GET", f"/projects/{project_id}/progress", note="Read accepted totals.")
-    objective = progress["objectives"][0]
-    log(f"  accepted {objective['accepted_frames']} of {objective['goal'].get('accepted_frames')} "
-        f"frames, {objective['accepted_integration_seconds']:g} s of integration")
+    log("\n# Report frames not yet submitted, and keep going")
+    exposure = panel["exposure_seconds"]
+    result = me.call("POST", "/me/checkins", {
+        "equipment_id": equipment_id, "assignment_id": assignment["id"],
+        "unsubmitted_captures": [{"panel_id": panel["id"], "frames": 5,
+                                  "integration_seconds": 5 * exposure}],
+        "observed_at": stamp(now + timedelta(minutes=30))}, "Check in with 5 frames waiting.")
+    log(f"  action: {result['action']}")
+    progress = me.call("GET", f"/projects/{project_id}/progress", note="Read the totals.")
+    done = next(o for o in progress["objectives"] if o["objective_id"] == objective["id"])
+    log(f"  accepted {done['accepted_frames']} frames ({done['accepted_integration_seconds']:g} s), "
+        f"{done['reported_frames']} reported, goal {objective['goal'].get('accepted_frames')} "
+        f"frames on each panel")
     return progress
+
+
+def describe(name: str, result: dict, config: dict) -> list[str]:
+    """Say an assignment in plain words: one line per panel, in order."""
+    assignment = result.get("assignment")
+    if assignment is None:
+        return [f"{name}: {result['action']} ({', '.join(result['reason_codes'])})"]
+    lines = []
+    for number, panel in enumerate(assignment["panels"]):
+        used = next(f for f in config["filters"] if f["id"] == panel["filter_id"])
+        band = used.get("name") or " + ".join(b["name"] for b in used["bandpasses"])
+        grid = panel["layout"]
+        if grid["columns"] * grid["rows"] == 1:
+            where = f"1 panel {panel['footprint']['width_degrees']:.2g}°×" \
+                    f"{panel['footprint']['height_degrees']:.2g}°"
+        else:
+            index = (grid["row"] - 1) * grid["columns"] + grid["column"]
+            where = f"panel {index} of {grid['columns'] * grid['rows']} " \
+                    f"(column {grid['column']}, row {grid['row']})"
+        frames = f"{panel['suggested_frames']} × {panel['exposure_seconds']:g} s"
+        lead = f"{name}: image" if number == 0 else f"{' ' * len(name)}  then"
+        lines.append(f"{lead} {panel['target_name']}, {where}, {band}, {frames}")
+    return lines
+
+
+def sample(api_root: str, key: str, log=print) -> list:
+    """Describe three rigs, check each in, and say what each should image."""
+    me = Client(api_root, key, log)
+    now = stamp(datetime.now(timezone.utc))
+    lines = []
+    for name, focal in RIGS:
+        equipment_id = str(uuid.uuid4())
+        config = rig(name, focal, [str(uuid.uuid4()) for _ in FILTERS])
+        me.call("PUT", f"/me/equipment/{equipment_id}", config, f"Describe {name}.")
+        result = me.call("POST", "/me/checkins", {"equipment_id": equipment_id, "observed_at": now},
+                         f"Check in {name}.")
+        lines += describe(name, result, config)
+    log("")
+    for line in lines:
+        log(line)
+    return lines
 
 
 def synthetic_frame(size: int) -> bytes:
@@ -182,23 +221,20 @@ def synthetic_frame(size: int) -> bytes:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--api-root", default="http://127.0.0.1:8080/v1")
-    parser.add_argument("--owner-key", help="Owner API key.")
-    parser.add_argument("--participant-key", help="Participant API key.")
-    parser.add_argument("--owner-pairing-code", help="Pair as the owner instead of using a key.")
-    parser.add_argument("--participant-pairing-code", "--pairing-code",
-                        help="Pair as the participant instead of using a key.")
+    parser.add_argument("--key", "--participant-key", help="API key.")
+    parser.add_argument("--pairing-code", help="Pair first instead of passing a key.")
+    parser.add_argument("--sample", action="store_true",
+                        help="Check in three rigs and print what each should image.")
     args = parser.parse_args()
-    owner_key = args.owner_key
-    participant_key = args.participant_key
-    if args.owner_pairing_code:
-        print("# Owner: pair")
-        owner_key = pair(args.api_root, args.owner_pairing_code, "reference client (owner)")
-    if args.participant_pairing_code:
-        print("# Participant: pair")
-        participant_key = pair(args.api_root, args.participant_pairing_code, "reference client")
-    if not owner_key or not participant_key:
-        parser.error("give a key or pairing code for both the owner and the participant")
-    run(args.api_root, owner_key, participant_key)
+    key = args.key
+    if args.pairing_code:
+        key = pair(args.api_root, args.pairing_code, "reference client")
+    if not key:
+        parser.error("give --key or --pairing-code")
+    if args.sample:
+        sample(args.api_root, key)
+    else:
+        run(args.api_root, key)
 
 
 if __name__ == "__main__":

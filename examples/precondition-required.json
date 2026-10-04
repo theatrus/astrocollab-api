@@ -1,8 +1,0 @@
-{
-  "type": "https://collab.example/problems/precondition-required",
-  "title": "Precondition required",
-  "status": 428,
-  "code": "precondition_required",
-  "detail": "Send If-Match with the ETag from your last read.",
-  "request_id": "00000000-0000-4000-8000-000000000090"
-}

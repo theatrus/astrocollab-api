@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/BandpassMergePatchUpdateReplaceOnly.schema.json",
+  "title": "BandpassMergePatchUpdateReplaceOnly",
+  "type": "object",
+  "required": [
+    "name",
+    "center_nm"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "center_nm": {
+      "type": "number",
+      "minimum": 100,
+      "maximum": 30000
+    },
+    "width_nm": {
+      "type": "number",
+      "maximum": 30000,
+      "description": "Full width at half maximum. In an objective, the widest band accepted.",
+      "exclusiveMinimum": 0
+    }
+  },
+  "description": "A passband: a named center wavelength, with its width when known.",
+  "additionalProperties": false
+}

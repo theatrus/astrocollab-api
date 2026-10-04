@@ -1,6 +1,6 @@
 """Check HTTP requests and responses against the AstroCollab OpenAPI contract.
 
-The contract only describes message shape. Stateful rules (ETags, idempotency,
+The contract only describes message shape. Stateful rules (ETags, retries,
 credit) live in the server suite and the client proxy.
 """
 from __future__ import annotations
@@ -14,6 +14,8 @@ import re
 from typing import Any, Mapping
 
 from jsonschema import Draft202012Validator, FormatChecker
+from referencing import Registry, Resource
+from referencing.jsonschema import DRAFT202012
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,9 +33,12 @@ class Operation:
     spec: dict[str, Any]
     parameters: list[dict[str, Any]]
 
+    security: list[dict[str, Any]] | None = None
+
     @property
-    def token_context(self) -> str:
-        return self.spec.get("x-token-context", "account")
+    def auth_required(self) -> bool:
+        """True unless the operation's security list allows no credential."""
+        return {} not in (self.security or [])
 
     def param(self, location: str, name: str) -> dict[str, Any] | None:
         for p in self.parameters:
@@ -47,12 +52,26 @@ def _headers(headers: Mapping[str, str] | None) -> dict[str, str]:
 
 
 class Contract:
-    def __init__(self, path: Path | str = DEFAULT_CONTRACT, allow_http_loopback: bool = False):
+    def __init__(self, path: Path | str = DEFAULT_CONTRACT, allow_http_loopback: bool = False,
+                 schema_dir: Path | str | None = None):
+        """Load the OpenAPI contract. With `schema_dir`, validate named bodies against
+        the standalone JSON Schemas there (such as schemas/) instead."""
         self.doc = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
         self.components = copy.deepcopy(self.doc["components"])
         if allow_http_loopback:
             _relax_https(self.components)
         self.format_checker = FormatChecker()
+        self.registry = None
+        self.schema_ids: dict[str, str] = {}
+        if schema_dir is not None:
+            resources = []
+            for file in sorted(Path(schema_dir).glob("*.schema.json")):
+                schema = json.loads(file.read_text(encoding="utf-8"))
+                if allow_http_loopback:
+                    _relax_https(schema)
+                self.schema_ids[file.name.removesuffix(".schema.json")] = schema["$id"]
+                resources.append((schema["$id"], Resource.from_contents(schema, default_specification=DRAFT202012)))
+            self.registry = Registry().with_resources(resources)
         self.operations: list[Operation] = []
         for template, item in self.doc["paths"].items():
             shared = item.get("parameters", [])
@@ -62,7 +81,8 @@ class Contract:
                 params = [self._resolve(p) for p in shared + spec.get("parameters", [])]
                 pattern = "^" + re.sub(r"\\\{([^}]+)\\\}", r"(?P<\1>[^/]+)", re.escape(template)) + "$"
                 self.operations.append(Operation(spec["operationId"], method.upper(), template,
-                                                 re.compile(pattern), spec, params))
+                                                 re.compile(pattern), spec, params,
+                                                 spec.get("security", self.doc.get("security", []))))
         # Literal segments win over templated ones.
         self.operations.sort(key=lambda op: -len(re.sub(r"\{[^}]+\}", "", op.template)))
         self.by_id = {op.id: op for op in self.operations}
@@ -94,8 +114,13 @@ class Contract:
     def validate(self, schema: dict[str, Any] | str, value: Any) -> list[str]:
         if isinstance(schema, str):
             schema = {"$ref": f"#/components/schemas/{schema}"}
-        validator = Draft202012Validator({**schema, "components": self.components},
-                                         format_checker=self.format_checker)
+        name = self.schema_name(schema)
+        if self.registry is not None and name in self.schema_ids:
+            validator = Draft202012Validator({"$ref": self.schema_ids[name]}, registry=self.registry,
+                                             format_checker=self.format_checker)
+        else:
+            validator = Draft202012Validator({**schema, "components": self.components},
+                                             format_checker=self.format_checker)
         errors = sorted(validator.iter_errors(value), key=lambda e: list(e.absolute_path))
         return [f"{_pointer(e.absolute_path)}: {e.message[:200]}" for e in errors[:10]]
 
@@ -119,8 +144,7 @@ class Contract:
         body = body or b""
 
         auth = h.get("authorization")
-        context = op.token_context
-        if not context.startswith("public") and not auth:
+        if op.auth_required and not auth:
             issues.append("missing Authorization header")
         if auth and not re.match(r"^Bearer \S+$", auth):
             issues.append("Authorization must use the Bearer scheme")
@@ -147,11 +171,6 @@ class Contract:
                     continue
                 issues += [f"{name} header {m}" for m in self.validate(p.get("schema", {}), _coerce(value, p))]
 
-        if op.param("header", "If-Match") and op.param("header", "If-None-Match") and op.method == "PUT":
-            sent = [n for n in ("if-match", "if-none-match") if n in h]
-            if len(sent) != 1:
-                issues.append("send exactly one of If-Match or If-None-Match: *")
-
         request_body = op.spec.get("requestBody")
         if request_body is None:
             if body:
@@ -169,13 +188,16 @@ class Contract:
             if digest and digest != hashlib.sha256(body).hexdigest():
                 issues.append("X-Part-SHA256 does not match the part bytes")
             return issues
-        if ctype != "application/json":
-            issues.append("JSON body must use Content-Type application/json")
+        media = content.get(ctype)
+        if media is None:
+            declared = " or ".join(content)
+            issues.append(f"body must use Content-Type {declared}, got {ctype or 'none'}")
+            media = next(iter(content.values()))
         try:
             value = json.loads(body)
         except ValueError:
             return issues + ["body is not valid JSON"]
-        schema = content["application/json"]["schema"]
+        schema = media["schema"]
         issues += [f"body {m}" for m in self.validate(schema, value)]
         return issues
 

@@ -21,7 +21,8 @@ model SolveEvidence {
   measured_at: Timestamp;
 }
 
-model Master {
+/** A calibration frame used on a sub: its role and hash. The frame itself is never sent. */
+model CalibrationFrame {
   role: "bias" | "dark" | "flat" | "dark_flat";
   sha256: Sha256;
 }
@@ -40,8 +41,10 @@ model CalibrationStep {
   }
 ])
 model Calibration {
-  raw_sha256: Sha256;
-  @minItems(0) @maxItems(16) masters: Master[];
+  /** SHA-256 of the raw frame. Required for calibrated subs; omitted for stacked masters. */
+  raw_sha256?: Sha256;
+
+  @minItems(0) @maxItems(16) calibration_frames: CalibrationFrame[];
   @minItems(1) @maxItems(32) steps: CalibrationStep[];
   pixel_unit: "adu" | "electrons" | "normalized";
   @minValueExclusive(0) adu_scale?: numeric;
@@ -55,19 +58,44 @@ model Calibration {
     `if`: #{properties: #{delivery: #{`const`: "external"}}, required: #["delivery"]},
     `then`: #{required: #["external"]},
     `else`: #{not: #{required: #["external"]}}
+  },
+  #{
+    `if`: #{properties: #{kind: #{`const`: "stacked_master"}}, required: #["kind"]},
+    `then`: #{
+      required: #["stack"],
+      properties: #{calibration: #{properties: #{registration: #{`const`: "registered"}}}}
+    },
+    `else`: #{
+      required: #["origin_id", "capture_id", "captured_at"],
+      not: #{required: #["stack"]},
+      properties: #{calibration: #{required: #["raw_sha256"]}}
+    }
   }
 ])
 model ArtifactManifest {
   id: Uuid;
-  origin_id: Uuid;
-  capture_id: Uuid;
+
+  /** `calibrated_sub` is one calibrated exposure. `stacked_master` combines many; see `stack`. */
+  kind?: "calibrated_sub" | "stacked_master" = "calibrated_sub";
+
+  /** Capture identity of a sub. Masters carry it for each sub in `stack.subs`. */
+  origin_id?: Uuid;
+
+  capture_id?: Uuid;
+
   @extension("uniqueItems", true) @minItems(1) @maxItems(100) objective_ids: Uuid[];
   processing_group_id: Uuid;
   equipment: EquipmentRef;
-  captured_at: Timestamp;
+  /** Start of a sub's exposure. Masters use `stack` times instead. */
+  captured_at?: Timestamp;
+
+  /** Exposure of a sub, or of each sub in a master. A master combines subs of one length. */
   @maxValue(86400) @minValueExclusive(0) exposure_seconds: numeric;
   filter_id: Uuid;
-  bandpass: Bandpass;
+
+  /** Passbands of the filter used. A dual-band frame can count toward two objectives. */
+  @minItems(1) @maxItems(8) bandpasses: Bandpass[];
+
   format: "fits" | "xisf";
   @minValue(1) size_bytes: integer;
   sha256: Sha256;
@@ -75,53 +103,87 @@ model ArtifactManifest {
   @minItems(0) @maxItems(100) measurements: Measurement[];
   solve?: SolveEvidence;
   supersedes_artifact_id?: Uuid;
-  recommendation_id?: Uuid;
+  /** The assignment and panel the frame was taken for. */
+  assignment_id?: Uuid;
   panel_id?: Uuid;
 
-  /** `upload` sends bytes through an upload session. `external` registers a shared file. */
+  /** How the file arrives, for subs and masters alike: `upload` through an upload session, or `external` as a shared file. */
   delivery?: "upload" | "external" = "upload";
 
   /** Where the file is shared. Required for, and only allowed with, external delivery. */
   external?: ExternalLocation;
 
+  /** How a master was stacked, and from which subs. Required for, and only allowed with, masters. */
+  stack?: Stack;
+
   @extension("propertyNames", #{pattern: "^[a-z0-9]+(?:[.-][a-z0-9]+)+$"}) @extension("maxProperties", 32) extensions?: Record<unknown>;
 }
 
-/** A file shared outside the API. Visible only to the submitter and reviewing maintainers. */
+/** One sub that went into a master. */
+model StackedSub {
+  origin_id: Uuid;
+  capture_id: Uuid;
+  captured_at: Timestamp;
+
+  /** SHA-256 of the calibrated sub as it entered the stack. */
+  sha256: Sha256;
+}
+
+/** Provenance of a stacked master. */
+model Stack {
+  @minValue(1) @maxValue(5000) sub_count: integer;
+
+  /** Total exposure of the subs: `sub_count` × `exposure_seconds`. */
+  @minValueExclusive(0) integration_seconds: numeric;
+
+  first_captured_at: Timestamp;
+  last_captured_at: Timestamp;
+
+  /** Every sub in the master. A sub may appear in only one credited master or sub. */
+  @minItems(1) @maxItems(5000) subs: StackedSub[];
+
+  /** For example "star alignment, Lanczos-3". */
+  registration: Text;
+
+  /** For example "additive with scaling". */
+  normalization: Text;
+
+  /** For example "winsorized sigma clip, 3.0/3.0". */
+  rejection: Text;
+
+  /** For example "PSF signal weight". */
+  weighting: Text;
+
+  /** Present when the master was drizzled. */
+  @minValue(1) @maxValue(4) drizzle_scale?: numeric;
+
+  software: Text;
+  version: Text;
+}
+
+/**
+ * A file shared outside the API: a calibrated sub or a stacked master. Visible only to the
+ * submitter and reviewing maintainers. Many subs can share one folder link, each naming
+ * its file with `path`.
+ */
 model ExternalLocation {
   provider: ExternalProvider;
 
-  /** Link the project can open. It may grant access; treat it as private. */
+  /** Link to the file, or to a shared folder that holds it. It may grant access; treat it as private. */
   url: HttpsUrl;
 
-  /** Provider's file ID, when the link alone does not identify the file. */
+  /** The file's path inside the shared folder at `url`, using `/` between folders. */
+  @minLength(1) @maxLength(1024) @pattern("^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\\\]+$") path?: string;
+
+  /** Provider's file ID, when the link and path do not identify the file. */
   @minLength(1) @maxLength(1024) reference?: string;
 
   shared_at: Timestamp;
 }
 
-/** Result of fetching an externally shared file. */
-@extension("allOf", #[
-  #{
-    `if`: #{properties: #{outcome: #{`enum`: #["verified", "digest_mismatch"]}}},
-    `then`: #{required: #["sha256", "size_bytes"]}
-  }
-])
-model RetrievalInput {
-  /** `verified` means the bytes match the manifest's hash and size. */
-  outcome: "verified" | "unavailable" | "digest_mismatch";
-
-  /** SHA-256 of the bytes retrieved. */
-  sha256?: Sha256;
-
-  @minValue(1) size_bytes?: integer;
-  retrieved_at: Timestamp;
-  note?: Text;
-}
-
+/** A batch of files for one project. The client picks the `id`; repeating it returns the existing submission. */
 model SubmissionCreate {
   id: Uuid;
-  participation_id: Uuid;
   @minValue(1) project_revision: integer;
   @minItems(1) @maxItems(100) artifacts: ArtifactManifest[];
 }
@@ -143,142 +205,52 @@ model UploadSession {
   @minItems(0) @maxItems(10000) received_parts: PartReceipt[];
 }
 
+/** What happened to one file. */
 model ArtifactResult {
   artifact_id: Uuid;
   state: "uploading" | "awaiting_retrieval" | "received" | "validating" | "accepted" | "rejected" | "superseded";
-  assessment_id?: Uuid;
+
+  /** Why a file was rejected, such as `digest_mismatch` or `quality_limit`. */
   @minItems(0) @maxItems(32) reason_codes: Text[];
+
+  /** Subs credited toward the goal: 1 for a sub, the accepted count for a master. */
+  @minValue(0) credited_frames?: integer;
+
+  @minValue(0) credited_integration_seconds?: numeric;
 }
 
 model Submission {
   id: Uuid;
   project_id: Uuid;
-  participation_id: Uuid;
   @minValue(1) project_revision: integer;
   state: "uploading" | "processing" | "complete";
   created_at: Timestamp;
   manifest: SubmissionCreate;
   @minItems(0) @maxItems(100) uploads: UploadSession[];
   @minItems(1) @maxItems(100) artifacts: ArtifactResult[];
-  job_id?: Uuid;
 }
 
-/**
- * Per artifact/objective. Non-surplus accepted credit is one frame and its exposure; surplus
- * contributes zero required credit.
- */
-@extension("allOf", #[
-  #{
-    `if`: #{properties: #{surplus: #{`const`: true}}},
-    then: #{
-      properties: #{accepted_frames: #{`const`: 0}, accepted_integration_seconds: #{`const`: 0}}
-    },
-    `else`: #{
-      properties: #{accepted_frames: #{`const`: 1}, accepted_integration_seconds: #{exclusiveMinimum: 0}}
-    }
-  }
-])
-model Credit {
-  objective_id: Uuid;
-  @minValue(0) @maxValue(1) accepted_frames: integer;
-  @minValue(0) accepted_integration_seconds: numeric;
-  @minValue(0) @maxValue(1) coverage_fraction: numeric;
-  surplus: boolean;
-}
+@summary("Describe files to submit and get upload sessions")
+@tag("submissions")
+@post @route("/projects/{project_id}/submissions")
+op createSubmission(
+  @path project_id: Uuid,
+  @body body: SubmissionCreate
+): Created<Submission> | Existing<Submission> | WriteErrors;
 
-@extension("allOf", #[
-  #{
-    `if`: #{properties: #{decision: #{`const`: "rejected"}}},
-    then: #{properties: #{credits: #{maxItems: 0}, reasons: #{minItems: 1}}}
-  },
-  #{
-    `if`: #{properties: #{decision: #{`const`: "accepted"}}},
-    then: #{properties: #{credits: #{minItems: 1}}}
-  }
-])
-model AssessmentInput {
-  id: Uuid;
-  artifact_id: Uuid;
-  @minValue(1) policy_revision: integer;
-  decision: "accepted" | "rejected";
-  @minItems(0) @maxItems(32) reasons: Text[];
-  @minItems(0) @maxItems(100) measurements: Measurement[];
-  @minItems(0) @maxItems(100) credits: Credit[];
-}
-
-@extension("allOf", #[
-  #{
-    `if`: #{properties: #{decision: #{`const`: "rejected"}}},
-    then: #{properties: #{credits: #{maxItems: 0}, reasons: #{minItems: 1}}}
-  },
-  #{
-    `if`: #{properties: #{decision: #{`const`: "accepted"}}},
-    then: #{properties: #{credits: #{minItems: 1}}}
-  }
-])
-model Assessment {
-  id: Uuid;
-  submission_id: Uuid;
-  project_id: Uuid;
-  participation_id: Uuid;
-  origin_id: Uuid;
-  capture_id: Uuid;
-  artifact_id: Uuid;
-  @minValue(1) policy_revision: integer;
-  decision: "accepted" | "rejected";
-  @minItems(0) @maxItems(32) reasons: Text[];
-  @minItems(0) @maxItems(100) measurements: Measurement[];
-  @minItems(0) @maxItems(100) credits: Credit[];
-  assessed_at: Timestamp;
-  assessor_id: Uuid;
-  @minValue(1) event_sequence: integer;
-}
-
-model AssessmentPage {
-  @minItems(0) @maxItems(100) items: Assessment[];
-  @maxLength(4096) next_cursor: string | null;
-}
-
-model SubmissionPage {
-  @minItems(0) @maxItems(100) items: Submission[];
-  @maxLength(4096) next_cursor: string | null;
-}
-
-/**
- * The project must match the token. submission:read-all may replace submission:read-own for
- * maintainers; ordinary contributors can only inspect their own submission.
- */
-@summary("Inspect manifest, transfer and per-artifact outcomes")
-@access("project", "submission:read-own")
-@extension("x-scope-rules", #{project: #[#["submission:read-own"], #["submission:read-all"]]})
+@summary("Read a submission and each file's outcome")
 @tag("submissions")
 @get @route("/submissions/{submission_id}")
-op getSubmission(
-  @path submission_id: Uuid,
-  ...ConditionalRead
-): Ok<Submission> | NotModified | Errors;
+op getSubmission(@path submission_id: Uuid): Ok<Submission> | Errors;
 
-@summary("Inspect received parts and session expiry")
-@access("project", "submission:write")
-@tag("uploads")
+@summary("See which parts of an upload arrived")
+@tag("submissions")
 @get @route("/uploads/{upload_id}")
-op getUpload(
-  @path upload_id: Uuid,
-  ...ConditionalRead
-): Ok<UploadSession> | NotModified | Errors;
+op getUpload(@path upload_id: Uuid): Ok<UploadSession> | Errors;
 
-@summary("Renew an unchanged upload after authorization checks")
-@access("project", "submission:write")
-@tag("uploads")
-@post @route("/uploads/{upload_id}/renew")
-op renewUpload(
-  @path upload_id: Uuid,
-  ...IdempotencyKey
-): Ok<UploadSession> | WriteErrors;
-
-@summary("Write a verified fixed-size part idempotently")
-@access("project", "submission:write")
-@tag("uploads")
+/** Sending the same bytes again returns the same receipt. */
+@summary("Send one part of a file")
+@tag("submissions")
 @put @route("/uploads/{upload_id}/parts/{part_number}")
 op putUploadPart(
   @path upload_id: Uuid,
@@ -289,50 +261,8 @@ op putUploadPart(
   @body body: bytes
 ): Ok<PartReceipt> | WriteErrors;
 
-@summary("Finalize uploads and queue assessment")
-@access("project", "submission:write")
+/** Returns the submission in `processing`. Read it again until it is `complete`. */
+@summary("Finish a submission and start assessment")
 @tag("submissions")
 @post @route("/submissions/{submission_id}/finalize")
-op finalizeSubmission(
-  @path submission_id: Uuid,
-  ...IdempotencyKey
-): Accepted<Job> | WriteErrors;
-
-/** submission:read-all can replace submission:read-own for a maintainer of this project. */
-@summary("Read artifact assessment history")
-@access("project", "submission:read-own")
-@extension("x-scope-rules", #{project: #[#["submission:read-own"], #["submission:read-all"]]})
-@tag("submissions")
-@get @route("/submissions/{submission_id}/assessments")
-op listAssessments(
-  @path submission_id: Uuid,
-  ...Paging
-): Ok<AssessmentPage> | Errors;
-
-/**
- * For an artifact with external delivery, after the submission is finalized; earlier calls
- * return 409 `invalid_transition`. `verified` requires the manifest's hash and size, and
- * moves the artifact to validation. `unavailable` and `digest_mismatch` reject it.
- */
-@summary("Record retrieval of an externally shared file")
-@access("project", "assessment:write")
-@tag("submissions")
-@post @route("/submissions/{submission_id}/artifacts/{artifact_id}/retrieval")
-op recordRetrieval(
-  @path submission_id: Uuid,
-  @path artifact_id: Uuid,
-  ...IdempotencyKey,
-  ...IfMatch,
-  @body body: RetrievalInput
-): Ok<Submission> | ConditionalWriteErrors;
-
-@summary("Append an assessment and update credit atomically")
-@access("project", "assessment:write")
-@tag("submissions")
-@post @route("/submissions/{submission_id}/assessments")
-op appendAssessment(
-  @path submission_id: Uuid,
-  ...IdempotencyKey,
-  ...IfMatch,
-  @body body: AssessmentInput
-): Created<Assessment> | ConditionalWriteErrors;
+op finalizeSubmission(@path submission_id: Uuid): Accepted<Submission> | WriteErrors;

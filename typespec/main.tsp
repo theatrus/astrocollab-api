@@ -1,15 +1,13 @@
 import "@typespec/http";
 import "@typespec/openapi";
 import "@typespec/openapi3";
-import "./lib/access.tsp";
 import "./common.tsp";
 import "./problem.tsp";
 import "./capabilities.tsp";
 import "./pairing.tsp";
 import "./projects.tsp";
-import "./participations.tsp";
+import "./rigs.tsp";
 import "./planning.tsp";
-import "./sync.tsp";
 import "./submissions.tsp";
 
 using Http;
@@ -26,9 +24,8 @@ using OpenAPI;
 namespace AstroCollab;
 
 /**
- * Send `Authorization: Bearer <api key>`. Users create keys on the server's account pages.
- * Keys are opaque. `x-token-context` says whether an operation acts for the account or
- * for its participation in one project; `x-required-scopes` lists the scopes it needs.
- * See spec/authentication.md.
+ * Send `Authorization: Bearer <api key>`. Each client installation gets its key by pairing.
+ * A key acts for its account, optionally limited to some projects. See
+ * spec/authentication.md.
  */
 model bearerAuth is BearerAuth;

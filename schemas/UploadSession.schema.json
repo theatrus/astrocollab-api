@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/UploadSession.schema.json",
+  "title": "UploadSession",
+  "type": "object",
+  "required": [
+    "id",
+    "submission_id",
+    "artifact_id",
+    "size_bytes",
+    "part_size_bytes",
+    "part_count",
+    "expires_at",
+    "received_parts"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "submission_id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "artifact_id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "part_size_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "part_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "expires_at": {
+      "$ref": "Timestamp.schema.json"
+    },
+    "received_parts": {
+      "type": "array",
+      "items": {
+        "$ref": "PartReceipt.schema.json"
+      },
+      "minItems": 0,
+      "maxItems": 10000
+    }
+  },
+  "additionalProperties": false
+}

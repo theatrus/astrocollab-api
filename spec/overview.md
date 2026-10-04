@@ -1,60 +1,62 @@
 # How the API works
 
-A project owner publishes the frames a project needs. Participants capture
-frames with their own equipment and upload them. The server checks each frame
-and credits the ones that meet the requirements.
+A project describes one picture that many people build together: its targets,
+filters and how deep each part must go. Contributors work on their own, on their
+own nights, with their own rigs. Each rig asks the server what to image, and the
+server hands out the part of the picture that most needs data and suits that
+rig. Contributors upload what they capture; the server checks it and credits the
+accepted data toward the shared goal.
 
 The server never controls equipment and never reserves a target. Two people can
 image the same field at once; the server credits useful data from both.
 
-This page follows one participant from first contact to credited data. Each step
+This page follows one contributor from first contact to credited data. Each step
 shows the request and the important part of the response. Full payloads are in
 [`examples/`](../examples), and the [reference server](../reference/README.md)
-runs every step on your machine.
+runs every step on your machine, with sample projects.
 
 ## The flow
 
-| Step | Request | Credential |
+| Step | Where | Request |
 | --- | --- | --- |
-| 1. Discover the server | `GET /capabilities` | None |
-| 2. Pair the client | `POST /pair` with a code from the account page | None |
-| 3. Find a project | `GET /projects`, `GET /projects/{id}` | None for public projects |
-| 4. Join it | `POST /projects/{id}/participations` | API key |
-| 5. Describe your equipment (optional) | `PUT .../equipment/{id}`, `PUT .../capacity`, `POST .../checkins` | API key |
-| 6. Upload frames | `POST /projects/{id}/submissions`, `PUT /uploads/{id}/parts/{n}`, `POST /submissions/{id}/finalize` | API key |
-| 7. Read the result | `GET /jobs/{id}`, `GET /projects/{id}/progress` | API key |
+| 1. Join a project and get a pairing code | Server's web pages | None |
+| 2. Pair the client | Client | `POST /pair` |
+| 3. Describe the rig | Client | `PUT /me/equipment/{rig}` |
+| 4. Ask what to image | Client | `POST /me/checkins` |
+| 5. Capture | Your own software | None |
+| 6. Upload | Client | `POST /projects/{id}/submissions`, `PUT /uploads/{id}/parts/{n}`, `POST /submissions/{id}/finalize` |
+| 7. Read the result | Client | `GET /submissions/{id}`, `GET /projects/{id}/progress` |
 
-The examples below use two shell variables:
+Steps 1 to 3 happen once per rig. Steps 4 to 7 repeat each night. The examples
+use these shell variables:
 
 ```sh
-API=https://collab.example/v1   # the server's API root
+API=https://collab.example/v1   # the server's API root, from GET /capabilities
 KEY=...                          # the API key from step 2
 INSTALLATION=$(uuidgen)          # made once per installation, then kept
+RIG=$(uuidgen)                   # made once per rig, then kept
 ```
 
-## 1. Discover the server
+## 1. Join a project and get a pairing code
 
-```sh
-curl $API/capabilities
-```
+The user does this in a browser. The server's `account_url` from
+`GET /capabilities` leads to its pages. There the user picks a project, accepts
+its terms, and issues a pairing code for the rig. Servers should let the user do
+both in one step on the project page.
 
-```json
-{
-  "server_id": "00000000-0000-4000-8000-000000000099",
-  "api_root": "https://collab.example/v1",
-  "features": ["recommendations"],
-  "account_url": "https://collab.example/account",
-  "limits": { "max_chunk_bytes": 8388608, "idempotency_retention_seconds": 86400 }
-}
-```
+A project says what it wants back:
 
-`features` lists optional parts the server supports. `account_url` is where the
-user signs up and issues pairing codes. [Full response](../examples/getCapabilities.response.json).
+- **Calibrated subs:** each calibrated exposure as its own file. The project
+  stacks everything.
+- **Stacked masters:** you stack your own subs and send the master, with a list
+  of the subs inside it.
+
+The client finds the projects you joined with `GET /me/projects`.
 
 ## 2. Pair the client
 
-The user opens `account_url`, issues a pairing code, and enters it in the
-client. The client trades the code for its own API key:
+The user enters the code in the client. The client trades it for its own API
+key. This request needs no `Authorization` header:
 
 ```sh
 curl -X POST $API/pair \
@@ -66,81 +68,125 @@ curl -X POST $API/pair \
 { "key_id": "00000000-0000-4000-8000-000000000018", "api_key": "acpk_...", "client_name": "Roof rig 2" }
 ```
 
-The key appears only in this response. Store it, then send it on every private
-request:
+The key appears only in this response. Store it in the system credential store
+and send it on every other request. See [Authentication](authentication.md).
+
+## 3. Describe the rig
+
+The server hands out work by what each rig can do: its field of view, sampling,
+filters, color or mono sensor, and, if given, where it is. The user may enter
+some of this on the server's web pages when setting the rig up; a pairing code
+issued for that rig returns its `equipment_id`. The client can fill in the rest.
+
+To register a new rig, or replace its description:
 
 ```sh
-curl -H "Authorization: Bearer $KEY" $API/me/participations
-```
-
-A `200` means the key works. The response lists the projects the user has
-joined. See [Authentication](authentication.md) for scopes and key handling.
-
-## 3. Find a project
-
-```sh
-curl $API/projects
-curl $API/projects/$PROJECT
-```
-
-The project's current revision lists its targets and objectives. An objective
-says what counts: the filter band, exposure range, sampling, calibration and the
-number of frames or seconds of accepted integration it needs.
-[Example revision](../examples/publishProject.response.json).
-
-## 4. Join the project
-
-Accept the project's current terms by echoing them back:
-
-```sh
-curl -X POST $API/projects/$PROJECT/participations \
+curl -X PUT $API/me/equipment/$RIG \
   -H "Authorization: Bearer $KEY" \
-  -H "Idempotency-Key: $(uuidgen)" \
-  -H "Content-Type: application/json" \
-  -d @examples/joinProject.request.json
-```
-
-```json
-{ "id": "00000000-0000-4000-8000-000000000003", "role": "contributor", "state": "active" }
-```
-
-Keep the participation `id`; later routes use it. Projects with approval-based
-enrollment return `"state": "requested"` until a maintainer approves.
-
-## 5. Describe your equipment (optional)
-
-This step lets the server suggest framing. Skip it if you plan on your own.
-
-```sh
-curl -X PUT $API/participations/$PART/equipment/$RIG \
-  -H "Authorization: Bearer $KEY" \
-  -H "If-None-Match: *" \
   -H "Content-Type: application/json" \
   -d @examples/registerEquipment.request.json
 ```
 
-Then offer time for the month with `PUT .../capacity` and check in now and then
-with `POST .../checkins`. A check-in returns advice, such as keep the current
-plan, wait, or a new framing to review. Advice never takes control of your
-equipment. See the [walkthrough](walkthrough.md#configure-automatic-framing).
+The example describes a 6248×4176 mono camera with 3.76 µm pixels on a 400 mm
+lens, with an H-alpha filter: about 3.4°×2.2° of sky. To change only some fields
+and keep the rest, such as filters entered on the web, send a merge patch:
 
-## 6. Upload frames
+```sh
+curl -X PATCH $API/me/equipment/$RIG \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/merge-patch+json" \
+  -d '{"focal_length_mm": 402.5}'
+```
+
+Each filter lists its passbands. A dual-narrowband filter on a color camera
+lists two, H-alpha and OIII, so one night can serve two objectives.
+[Color rig example](../examples/color-rig-equipment.json).
+
+## 4. Ask what to image
+
+```sh
+curl -X POST $API/me/checkins \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"equipment_id": "'$RIG'", "observed_at": "2026-10-04T04:00:00Z"}'
+```
+
+The server looks at every project you have joined, picks where this rig helps
+most, and assigns it work:
+
+```json
+{
+  "action": "image",
+  "next_checkin_seconds": 600,
+  "assignment": {
+    "id": "00000000-0000-4000-8000-000000000014",
+    "project_id": "00000000-0000-4000-8000-000000000001",
+    "expires_at": "2026-10-05T04:00:00Z",
+    "panels": [
+      { "id": "00000000-0000-4000-8000-000000000015",
+        "target_name": "M31 outer disk",
+        "footprint": {
+          "center": { "ra_degrees": 10.6847, "dec_degrees": 41.269 },
+          "width_degrees": 3.36, "height_degrees": 2.24, "position_angle_degrees": 0 },
+        "filter_id": "00000000-0000-4000-8000-000000000008",
+        "objective_ids": ["00000000-0000-4000-8000-000000000005"],
+        "exposure_seconds": 300,
+        "suggested_frames": 96 }
+    ]
+  }
+}
+```
+
+Each panel says where to point, which filter to use, how long each exposure
+should be and how many to take. [Full response](../examples/checkIn.response.json).
+
+You will rarely get a whole mosaic. When a target is bigger than your field, the
+server splits it into a grid and gives you the panel that most needs data;
+`layout` says which column and row it is. Other rigs get other panels. An
+assignment may list a few panels in order: move to the next when the current one
+has its suggested frames. Later check-ins may send you to another panel or target
+as the picture fills in.
+
+| `action` | What to do |
+| --- | --- |
+| `image` | Work through the panels in `assignment`, in order. |
+| `continue` | Keep working on your current assignment. |
+| `wait` | Nothing suits this rig now. `reason_codes` say why, such as `rig_incomplete`. |
+
+Check in again after `next_checkin_seconds`. Send the assignment you are working
+on as `assignment_id`, and report what you have captured but not yet submitted
+as `unsubmitted_captures`: totals per panel, replacing your last report. You
+don't have to upload to show progress. The server counts reported frames when it
+hands out work, which matters most in a masters project, where subs wait until
+there are enough to stack. There is nothing to accept or decline: your own software still
+decides when and whether to point the rig, within its own safety limits.
+
+## 5. Capture
+
+Capture and calibrate with your usual software. Keep the recommendation and
+panel IDs with each frame; the manifest refers to them. For a masters project,
+stack your subs once you have enough for the project's `master_rules`.
+
+## 6. Upload
 
 Upload happens in three requests: describe, send bytes, finish.
 
-**Describe.** Send a manifest listing each calibrated frame with its hash, size,
-exposure and calibration history.
-[Example manifest](../examples/createSubmission.request.json).
+**Describe.** Send a manifest with an `id` you choose. It lists each file with
+its hash, size, exposure and calibration history.
+[Example with subs](../examples/createSubmission.request.json);
+[example with a master](../examples/stacked-master-submission.json).
 
 ```sh
 curl -X POST $API/projects/$PROJECT/submissions \
   -H "Authorization: Bearer $KEY" \
-  -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
   -d @manifest.json
 ```
 
-The server answers with one upload session per frame. It chooses the part size:
+A master adds a `stack` block: every sub in it by capture ID, time and hash, and
+how they were registered, normalized, rejected and weighted.
+
+The server answers with one upload session per file. It chooses the part size:
 
 ```json
 {
@@ -171,25 +217,21 @@ connection drops, `GET /uploads/{id}` shows which parts arrived.
 
 ```sh
 curl -X POST $API/submissions/$SUBMISSION/finalize \
-  -H "Authorization: Bearer $KEY" \
-  -H "Idempotency-Key: $(uuidgen)"
+  -H "Authorization: Bearer $KEY"
 ```
 
-```json
-{ "id": "00000000-0000-4000-8000-000000000081", "kind": "assessment", "state": "queued", "poll_after_seconds": 3 }
-```
+The server answers `202` with the submission in `processing`.
 
 ## 7. Read the result
 
-Poll the job until `state` is `succeeded` or `failed`, waiting
-`poll_after_seconds` between reads:
+Read the submission until its `state` is `complete`. Each artifact then shows
+`accepted` or `rejected`, with reasons:
 
 ```sh
-curl -H "Authorization: Bearer $KEY" $API/jobs/$JOB
+curl -H "Authorization: Bearer $KEY" $API/submissions/$SUBMISSION
 ```
 
-A finished assessment job returns the submission with each frame's outcome.
-Accepted frames count toward the project:
+Accepted data counts toward the shared picture:
 
 ```sh
 curl -H "Authorization: Bearer $KEY" $API/projects/$PROJECT/progress
@@ -204,8 +246,9 @@ curl -H "Authorization: Bearer $KEY" $API/projects/$PROJECT/progress
 }
 ```
 
-Progress keeps accepted data apart from plans, reported captures and uploads
-still in review. Only accepted data counts toward a goal.
+Progress counts subs and seconds, whether they arrived alone or inside masters.
+It keeps accepted data apart from assigned frames, frames reported but not yet
+submitted, and uploads still in review. Only accepted data counts toward a goal.
 
 ## Sharing files outside the API
 
@@ -237,10 +280,8 @@ for uploaded files. [Example manifest](../examples/external-submission.json).
 | Base URL | Join every path to `api_root` from `/capabilities`. |
 | Credentials | Send `Authorization: Bearer <key>`. Never put a key in a URL or log. |
 | Bodies | Send and expect JSON, except upload parts, which are raw bytes. Servers reject unknown fields. |
-| `POST` | Send `Idempotency-Key` with a new UUID for each action. Reuse the same key and body when you retry. |
-| `PUT` to update | Send `If-Match` with the ETag from your last read. |
-| `PUT` to create | Send `If-None-Match: *`. |
-| `202 Accepted` | The response is a job. Poll `GET /jobs/{id}`. |
+| Retries | Every request is safe to repeat as is. Creates use an `id` you choose, so a retry finds the record. |
+| `202 Accepted` | Work continues on the server. Read the resource again later. |
 | Lists | Pass `next_cursor` back as `cursor` until it is `null`. |
 
 Errors use [`application/problem+json`](https://www.rfc-editor.org/rfc/rfc9457.html).
@@ -260,42 +301,16 @@ Act on `code`, not on the wording of `detail`:
 | Status | Meaning | What to do |
 | --- | --- | --- |
 | `401` | The key is wrong, expired or revoked. | Ask the user for a new key. |
-| `403` | The key lacks a scope, or your role does not allow this. | Show the error; do not retry. |
+| `403` | The account may not do this, for example it is not an active member. | Show the error; do not retry. |
 | `404` | Not found, or you may not see it. | Check the ID. |
-| `409` | State conflict, such as `upload_incomplete` or `idempotency_conflict`. | Read the resource, then decide. |
-| `412` | Your ETag is stale. | Read the resource again and reapply your change. |
-| `428` | You left out `If-Match`. | Read the resource to get its ETag. |
+| `409` | State conflict, such as `upload_incomplete` or `id_conflict`. | Read the resource, then decide. |
 | `422` | The body is invalid. `errors` points at the bad fields. | Fix the data. |
 | `429` | Too many requests. | Wait `Retry-After` seconds. |
-| `503` | The server is busy or down. | Retry later with the same `Idempotency-Key`. |
-
-## Running a project
-
-Owners use the same API with a maintainer role:
-
-1. `POST /projects` with the full requirements. The server creates a draft and
-   makes you its owner. [Example](../examples/createProject.request.json).
-2. `GET /projects/{id}/draft` to read the draft's ETag.
-3. `POST /projects/{id}/publish` with `If-Match`. Each publication creates a new,
-   unchangeable revision.
-
-Maintainers approve members with `POST /participations/{id}/review` and may
-append manual assessments with `POST /submissions/{id}/assessments`.
-
-## Keeping a local copy
-
-Clients that cache project data read a snapshot once, then follow a change feed:
-
-1. `POST /sync/snapshots` with the project IDs you want. Page through it.
-2. The last page returns `changes_cursor`. Store all pages and the cursor together.
-3. Poll `GET /changes?cursor=...` and apply each batch with its `next_cursor`.
-
-If the feed says `remove project_access`, stop using that project's private data
-and start a new snapshot if access returns.
+| `503` | The server is busy or down. | Retry the same request later. |
 
 ## Next
 
-- [Authentication](authentication.md): API keys, scopes and what servers must build.
+- [Authentication](authentication.md): pairing, API keys and what servers must build.
 - [Walkthrough](walkthrough.md): every example payload, in order.
 - [Protocol](protocol.md): the rules servers and clients must follow.
 - [Reference server](../reference/README.md) and

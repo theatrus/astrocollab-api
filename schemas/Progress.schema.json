@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Progress.schema.json",
+  "title": "Progress",
+  "type": "object",
+  "required": [
+    "project_id",
+    "revision",
+    "as_of",
+    "objectives",
+    "accepted_frames",
+    "accepted_integration_seconds"
+  ],
+  "properties": {
+    "project_id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "as_of": {
+      "$ref": "Timestamp.schema.json"
+    },
+    "objectives": {
+      "type": "array",
+      "items": {
+        "$ref": "ProgressObjective.schema.json"
+      },
+      "minItems": 0,
+      "maxItems": 100
+    },
+    "accepted_frames": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "accepted_integration_seconds": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "description": "How far the shared picture has come. Counts are subs, whether sent alone or in masters.",
+  "additionalProperties": false
+}

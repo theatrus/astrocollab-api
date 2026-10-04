@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / "_site"
 GUIDES = {
     "how-it-works": "spec/overview.md",
+    "rest": "spec/api.md",
     "authentication": "spec/authentication.md",
     "walkthrough": "spec/walkthrough.md",
     "protocol": "spec/protocol.md",
@@ -29,7 +30,7 @@ def build() -> None:
     DEST.mkdir(exist_ok=True)
     for name in ("styles.css", "app.js", "favicon.svg"):
         shutil.copyfile(ROOT / "site" / name, DEST / name)
-    for folder in ("openapi", "examples", "tests"):
+    for folder in ("openapi", "examples", "schemas", "tests"):
         target = DEST / folder
         target.mkdir(exist_ok=True)
         for source in (ROOT / folder).glob("*"):

@@ -1,38 +1,36 @@
 # AstroCollab protocol
 
-Version: 0.1.0-draft.1. Draft specification; no implementation yet.
+Version: 0.1.0-draft.1. Draft specification.
 
 MUST and MUST NOT mark requirements. SHOULD marks a recommendation; MAY marks
-an option. [OpenAPI](../openapi/astrocollab.yaml) defines payload structure.
-This document defines behavior that schema validation cannot check.
+an option. The [OpenAPI contract](../openapi/astrocollab.yaml) defines payload
+structure. This document defines the behavior that schemas cannot check.
 
-## 1. Authority and discovery
+## 1. What the API covers
 
-Each project has one server. The owner publishes frame requirements.
-Participants register equipment, offer time and submit calibrated exposures.
-The local acquisition system controls equipment, scheduling and safety.
-Servers MUST NOT issue equipment commands or reserve targets through this API.
+A project describes one picture that many contributors build together. The API
+is what a contributor's client calls: pair a rig, describe it, ask what to
+image, and send the results. It has 15 operations.
 
-Clients start with an HTTPS API root and call public `GET /capabilities`. The
-response gives the server UUID, API root, account pages, supported versions,
-features and limits. Clients verify TLS. All routes are relative to the API root, which need not use `/v1`.
+Everything else belongs to the server and its own tools: signup, joining
+projects, setting requirements, reviewing members, assessing data by hand,
+moderation and billing. This protocol says how the server must behave toward
+contributors, not how owners run it.
 
-Servers support projects, enrollment, equipment and capacity offers, intent,
-sync and authenticated uploads. Recommendations are optional. An unsupported
-recommendation route returns `404 unsupported_feature`; clients can plan locally.
-Servers manage signup, approval, moderation, recovery and billing through their
-own UI. Private resources require authentication. Example domains are not live
-services.
+The server never controls equipment and never reserves a target. The client's
+own software decides when and whether to point a rig.
 
-## 2. Identity, units and compatibility
+## 2. Conventions
 
-Identify resources by `(server_id, resource_id)`. Use opaque UUIDs, not names,
-coordinates, paths or database row IDs. A server UUID change requires explicit
-relinking. Equipment IDs belong to a participation.
+Clients start from an API root and call public `GET /capabilities`. It gives the
+server ID, API root, account pages (`account_url`), supported versions, optional
+features and limits. Routes are relative to the API root. Servers use HTTPS;
+`http://` is allowed only on loopback addresses, for local development.
 
-Identify captures by `(origin_id, capture_id)`. The producer assigns a persistent
-origin UUID. Clients retain both IDs when submitting or recalibrating a capture.
-Hashes detect identical bytes; they do not establish ownership or capture identity.
+Resources have opaque UUIDs. A capture is identified by `(origin_id,
+capture_id)`: the producer picks a persistent origin UUID, and the client keeps
+both IDs when it submits, recalibrates or stacks the capture. Hashes detect
+identical bytes; they do not prove who made them.
 
 | Quantity | Convention |
 | --- | --- |
@@ -43,437 +41,294 @@ Hashes detect identical bytes; they do not establish ownership or capture identi
 | Wavelength | Nanometers. |
 | Focal length / pixel size | Millimeters / micrometers. |
 | Duration / size | Seconds / bytes. |
-| Timestamp | RFC 3339 UTC with `Z`. Budget months use an IANA timezone. |
+| Timestamp | RFC 3339 UTC with `Z`. |
 
-Omit unknown values unless the schema permits null. Do not substitute zero.
-Clients MUST ignore unknown response fields but MUST reject unsupported
-`required_features` and unknown enum values in acquisition requirements.
-Servers reject unknown request fields. Use `extensions` for optional namespaced
-metadata; extensions cannot define required behavior, code, commands or paths.
-Incompatible changes require a new API version.
+Bodies are JSON, except upload parts, which are raw bytes. Omit unknown values
+rather than sending zero. Servers reject unknown request fields; clients ignore
+unknown response fields. Lists take an opaque `cursor` and `limit` (1–100,
+default 50) and return `next_cursor`, `null` on the last page.
 
-Servers MUST check ID uniqueness, foreign keys, time ordering and physical
-feasibility where JSON Schema cannot enforce them.
-
-## 3. API keys and scopes
-
-Private routes need `Authorization: Bearer <api key>`. This version defines no
-other credential. The [authentication guide](authentication.md) shows the client
-and server steps.
-
-### Pairing
-
-Each client installation gets its own key by pairing:
-
-1. On the account pages (`account_url`), the user issues a pairing code. The
-   user picks the key's scopes, and may limit it to listed projects or set an
-   expiry.
-2. The user enters the code in the client.
-3. The client calls `POST /pair` with the code, a persistent `installation_id`
-   and a `client_name`. It sends no `Authorization` header and no
-   `Idempotency-Key`.
-4. The server returns the new API key once, with `Cache-Control: no-store`.
-
-A code works once and expires within one hour. The server consumes the code and
-creates the key in one transaction. If the account already has a key for the
-same `installation_id`, pairing revokes that key. An unknown, used or expired
-code returns `401 invalid_pairing_code`; repeated failures return `429`. Clients
-MUST NOT retry pairing automatically. If the response is lost, the user issues a
-new code and revokes the orphan key.
-
-Servers MAY also let users create a key on the account pages and copy it into a
-client. Every server MUST support pairing.
-
-### Keys
-
-Servers store only hashes of codes and keys. Secrets carry at least 128 bits of
-randomness. The account pages list each key with its client name, installation,
-scopes and last use, and let the user revoke it. Clients treat keys as opaque
-and store them in a credential store.
-
-A key acts for its account:
-
-- On an account route, it carries the scopes the user gave it.
-- On a project route, the server finds the account's participation in that
-  project. The request needs an active participation, a key that covers the
-  project, and scopes that both the key and the participant's role allow.
-
-Servers check the key, membership and revocation on every request. Unknown,
-expired and revoked keys return `401`. Each key counts as one client: its ID is
-the client ID for idempotency keys, status writers and sync cursors. Clients
-SHOULD check a new key with `GET /me/participations`.
-
-### Scopes and contexts
-
-| Context | Scopes |
-| --- | --- |
-| Account | `account:read`, `participation:manage`, `project:create` |
-| Participant | `project:read`, `offer:write`, `intent:write`, `status:write`, `submission:write`, `submission:read-own` |
-| Maintainer | Participant scopes plus `project:manage`, `participation:review`, `assessment:write`, `submission:read-all` |
-
-Each operation's `x-token-context` says what the key acts for:
-
-| `x-token-context` | Meaning |
-| --- | --- |
-| `public` | No key. |
-| `account` | The key's account. |
-| `project` | The account's participation in the route's project. |
-| `account_or_project` | Either; `x-scope-rules` gives the scopes for each. |
-| `public_or_account`, `public_or_project` | No key, or as above. An invalid key still returns `401`. |
-
-`x-required-scopes` lists the default scopes. `x-scope-rules`, when present,
-replaces them by context or job kind: inner lists use AND; alternative lists use
-OR. Servers also check resource ownership. Assessment-job reads require
-submission-read permission. `submission:read-all` permits metadata review, not
-file downloads.
-
-Equipment, capacity, planning policy, intent and check-ins are private to their
-participation. Maintainers need explicit review scopes to read memberships or
-submissions. Public projects may expose summaries, requirements and aggregate
-progress. Members see another participant's activity only if that participant
-shares it. The server may use private offers to plan without disclosing them.
-
-Clients store keys in a credential store and send them only in the
-`Authorization` header. Never put them in URLs, manifests, logs or status. Use
-HTTPS. Clients MUST NOT forward keys across origins. Servers check origins and
-protect their cookie-based UI against CSRF.
-
-A later version may add OAuth sign-in. It will not change how API keys work.
-
-## 4. Projects and published requirements
-
-Project creation atomically creates the initial draft and an active owner
-participation. The request supplies complete requirements and accepts their
-terms. The owner's key can then use maintainer routes.
-
-`PUT` replaces the draft using its ETag in `If-Match`. Publication checks that
-same ETag and creates the next immutable revision in one transaction. Only
-maintainers can read drafts. The first publication applies the project's
-visibility setting. Before publication, `current_revision` is null, not zero.
-
-Requirements assign stable IDs to targets, objectives, processing groups and
-terms. Objectives specify coverage, bandpass, sampling, exposure purpose and
-duration, frame count or integration goals, calibration, color state and quality.
-When both count and integration goals exist, accepted data must meet both.
-Quality rules specify method, version, unit, limits and required evidence.
-Missing required evidence prevents acceptance; missing optional evidence does
-not count as failure. `fresh_pixel_solve` requires a solve of the submitted
-pixels. Headers and predicted coordinates cannot satisfy it.
-
-Processing groups define compatible sampling, color, registration and calibration.
-An assessment may credit a capture to several covered objectives. Count it once
-per objective and once in project-wide capture and integration totals.
-
-For mosaics, publish a target footprint and objective for each region that needs
-its own depth goal. A wide frame may cover several regions. Every credited frame
-must meet the objective's minimum coverage. Changing these regions requires a
-new project revision; recommendations cannot change acceptance requirements.
-
-Projects move from `draft` to `open`, then `paused` or `closed`. Owners reopen a
-project by publishing a new open revision. Closure stops enrollment and new
-recommendations. Captures must start before `capture_deadline`; clients must
-finalize before `submission_deadline`. Both bounds are exclusive. Later revisions
-preserve earlier submission windows and acceptance policies. Membership and
-storage/security restrictions still apply; disclose them before enrollment.
-
-`surplus_policy` selects `retain_and_attribute` or `reject_excess`. Reject excess
-with `goal_already_met`, not a quality-failure reason. Process concurrent credit
-decisions in server event-sequence order. Intents grant no priority. Evaluate a
-recalibrated replacement against its existing credit, without making it compete
-for a new place in the goal.
-
-Terms have an ID, version, hash and immutable HTTPS URL. Publication references
-the current version; enrollment and renewed consent record the accepted version.
-Finalization requires current consent, including submissions against older
-project revisions. If terms changed, keep staged bytes and return
-`terms_consent_required`. Terms must state data ownership, license, attribution,
-deletion, retention and withdrawal policies.
-
-## 5. Participation, equipment and monthly capacity
-
-Keep one participation per account/project, including its history. Repeated
-enrollment returns that record. Open enrollment sets `active`; approval-based
-enrollment sets `requested`. Maintainers approve or revoke. Participants can
-pause, resume a self-paused membership, withdraw, re-request enrollment under
-current policy, or renew consent. Only a maintainer can restore a revoked
-membership to `requested`. Check the participation ETag on each transition.
-The last active owner cannot leave or lose ownership. This draft does not define
-role transfer.
-
-Inactive memberships cannot use project routes or change project resources. Account
-reads still return the user's membership state. When a client learns that its
-membership is inactive, it stops new collaboration work at a safe boundary.
-Offline clients limit cached-plan use to the validity period the user approved.
-
-Equipment offers specify sensor and optical geometry, filters, rotation and
-optional approximate site data. Servers retain referenced revisions. Clients
-must not apply a new offer to active equipment without local approval. Use
-conditional reads/writes for current offers and revision routes for historical
-ones. Filters need a stable ID and physical bandpass; a name such as `Ha` is
-insufficient.
-
-Capacity specifies a `YYYY-MM`, IANA timezone, offered rig-seconds, equipment,
-UTC availability intervals and `soft` or `local_hard` mode. Count exposure time
-and acquisition overhead as attempted rig-time. Exclude weather idle, uploads
-and processing. Two rigs running for an hour consume two rig-hours. Split usage
-at local month boundaries; do not roll unused time forward automatically.
-Reported usage estimates effort; accepted integration measures accepted data.
-
-Clients MUST keep project shares within their total budget across rigs and
-servers. Each server sees only its share. Availability must fall in the named
-month, and equipment IDs must belong to the participation. With `local_hard`,
-the local scheduler avoids new work beyond its budget but completes safety
-actions. A server cannot enforce a global limit on disconnected clients.
-
-## 6. Recommendations, intent and live status
-
-### Automatic framing after setup
-
-Equipment registration returns the saved offer and planning advice. Check-in
-reports equipment/capacity revisions, the last adopted recommendation and local
-progress. It returns advice and the next check-in interval. Either request can
-queue a recommendation when coverage needs change. Retries must not queue
-duplicate work. Servers without recommendations return `unavailable` advice.
-
-`PUT /participations/{id}/planning-policy` stores `suggest_only` or `automatic`
-mode, approved equipment revisions, sky regions, filters, exposure limits,
-overlap, panel count, rotation, terms version and cached-plan lifetime. The
-capacity offer supplies the time budget. Clients MUST obtain user consent to
-enable or expand automatic mode, even with `offer:write` permission.
-
-Approved regions include target IDs and explicit bounds on panel centers.
-Retaining a target ID does not authorize a new position. Clients check those
-bounds, overlap and objective coverage before accepting a recommendation.
-
-In automatic mode, clients may change future framing at safe boundaries without
-prompting for each panel. Check-in can recommend keeping the plan, changing the
-center or mosaic panel, waiting, or requesting review. An intent does not reserve
-coverage or block other participants.
-
-Recommendations include the policy revision, demand sequence, expiry,
-`automatic_eligible` and review reasons. Clients MUST check these against local
-consent and current equipment before execution. Fixed cameras retain their
-confirmed angle within tolerance. Manual rotation, changed equipment or terms,
-unapproved regions or filters, and increased time commitments require review.
-Clients MUST retain panel/objective IDs and revision history for each capture.
-Do not change an exposure already in progress or rewrite its history.
-
-Offline clients may use a valid cached plan without checking the server before
-every exposure. Expiry stops new work at a safe boundary. Reconnection may update
-framing. Notify the user when review is required; routine updates need no notice.
-Automatic uploads require separate local consent.
-
-### Recommendation results and advisory progress
-
-Recommendation jobs reference exact project, equipment and capacity revisions.
-Results specify panel geometry, objective mappings, exposure recipes, estimated
-rig-time and accepted integration, assumptions, unmet objectives and expiry.
-They may use one wide field, a mosaic or a compatible subregion. Clients verify
-geometry, overlap, budget, feasibility and local safety before execution.
-
-Intents state planned objectives, panels, equipment, effort and expiry. Clients
-may cancel them. Expired intents stop affecting forecasts but retain their
-history. Servers accept overlapping valid intents. Stale intents cannot prevent
-another participant from acquiring or submitting data.
-
-Status is optional. Key it by participation and a stable writer UUID bound to
-the authenticated client. Sequence numbers increase across restarts; use a new
-writer ID to reset the sequence.
-
-| Incoming status | Server response |
-| --- | --- |
-| Lower sequence | Ignore; return `applied: false`. |
-| Same sequence and body | Return the previous result. |
-| Same sequence, different body | Return a conflict. |
-| Higher sequence | Store it with observation time and expiry. |
-
-Show expired status as stale. Backfilled captures must not overwrite current
-activity. Status, intent and pending uploads never create accepted credit.
-Clients default activity to private. `visibility: project` shares it with members.
-`GET /projects/{id}/activity` returns the caller's activity and other members'
-shared activity. Revocation removes shared visibility. Anonymous clients cannot
-read activity.
-
-## 7. HTTP concurrency, errors and limits
-
-Use JSON except for binary upload parts. Return errors as
-[`application/problem+json`](https://www.rfc-editor.org/rfc/rfc9457.html), with
-stable `code`, HTTP `status`, non-sensitive detail, request ID and optional field
-errors. Return `404` when a caller must not learn that another project's resource exists.
-
-Use strong ETags. Updates require one `If-Match`; return `428` if missing and
-`412` if stale. Create-or-replace offers and intents require exactly one of
-`If-Match` or `If-None-Match: *`. Return `400` for both, and `412` for a missing
-resource with `If-Match` or an existing one with `If-None-Match: *`. Publication
-checks the draft ETag.
-
-POST mutations, except `POST /pair`, require a UUID `Idempotency-Key`. Retain results for the advertised
-period, at least 24 hours. Scope keys by server, account, client, method and path.
-Compare canonical JSON hashes (RFC 8785) and semantic preconditions. Authenticate
-and check current permission first. Then replay an identical request's original
-response before checking preconditions that may now be stale. Changed content
-returns `409 idempotency_conflict`.
-
-Resource and capture IDs still prevent duplicate enrollment, submissions and
-credit after key expiry. For other mutations, clients inspect state before
-retrying an expired key. After a lost PUT response, read the resource and compare
-its content; normal precondition rules still apply.
-
-Lists use opaque cursors and `limit` (1–100; default 50). Only sync snapshots
-provide a consistent view across pages. Return `400` for invalid cursors and
-`410 cursor_expired` for expired ones. Queued work returns `202`, a job ID and
-polling delay. Completed jobs retain their result; failed jobs retain a problem.
+Errors use [`application/problem+json`](https://www.rfc-editor.org/rfc/rfc9457.html)
+with a stable `code`, the HTTP `status`, a short `detail`, a request ID and, for
+invalid input, field `errors`. Clients act on `code`.
 
 | Status | Meaning |
 | --- | --- |
-| `401` | Invalid authentication. |
-| `403` | Insufficient permission. |
-| `409` | State or idempotency conflict. |
-| `413` | Input exceeds byte limits. |
+| `401` | Missing, unknown, expired or revoked key. |
+| `403` | The account may not do this, for example it is not an active member. |
+| `404` | Not found, or not visible to this account. |
+| `409` | Conflict with current state, such as `id_conflict` or `upload_incomplete`. |
+| `413` | Input exceeds a size limit. |
 | `422` | Invalid or incompatible data. |
-| `429` | Quota or rate limit; include `Retry-After`. |
-| `503` | Temporary unavailability. |
+| `429` | Too many requests; wait `Retry-After` seconds. |
+| `503` | Temporarily unavailable; retry later. |
 
-Servers limit JSON size, object count, part size, decoded pixels, storage and
-compute. Check actual input, not just declared sizes. Reject client paths,
-executable metadata and requests to fetch arbitrary URLs. External delivery
-links are not fetch requests: servers fetch them only from listed hosts. Server links use HTTPS;
-clients never forward secrets across origins. Keep raw files locally and remove
-private metadata from exported copies according to user consent.
+Servers limit JSON size, part size, decoded pixels, storage and compute, and
+check actual input, not declared sizes. They reject client paths, executable
+metadata and requests to fetch arbitrary URLs.
 
-## 8. Consistent sync
+## 3. Pairing and API keys
 
-`POST /sync/snapshots` takes an account key and explicit project IDs.
-The server checks membership and captures a consistent view with a change
-sequence. It returns the snapshot ID and first page. Include project summaries,
-published revisions, the caller's participation, progress and own assessments.
-Read local offers and intents through their resource routes.
+Every private request carries `Authorization: Bearer <api key>`. Each client
+installation gets its own key by pairing:
 
-Page with `GET /sync/snapshots/{id}?cursor=...`. Only the final page returns
-`changes_cursor`, positioned after the snapshot's change sequence. Clients store
-all pages and the cursor atomically. Then read ordered upserts/removals from
-`GET /changes?cursor=...`, committing each batch with its `next_cursor`. Empty
-batches still return a cursor and polling delay. Handle repeated events without
-duplicate effects; use server sequence order, not client timestamps.
+1. On the server's web pages, the user issues a pairing code. The user may limit
+   the key to some projects, set an expiry, or issue the code for a rig already
+   set up on the web.
+2. The user enters the code in the client.
+3. The client calls `POST /pair` with the code, a persistent `installation_id`
+   and a `client_name`. It sends no `Authorization` header.
+4. The server returns the key once, with `Cache-Control: no-store`, and the rig's
+   `equipment_id` when the code was issued for a rig.
 
-Bind snapshots and cursors to the account, client and project selection.
-Changed selections and expired cursors require a new snapshot. Check permission
-on every page. If a client loses project access during pagination, return
-`409 snapshot_invalidated`; clients discard staged pages and start again.
+A code works once and expires within one hour. The server consumes the code and
+creates the key in one transaction. Pairing again with the same
+`installation_id` revokes that installation's old key. An unknown, used or
+expired code returns `401 invalid_pairing_code`; repeated failures return `429`.
+Clients MUST NOT retry pairing on their own. If the response is lost, the user
+issues a new code and revokes the orphan key. Servers MAY also let users copy a
+key from the web pages; every server MUST support pairing.
 
-The change feed emits `remove project_access` when membership becomes paused,
-withdrawn or revoked, without further private content. It may retain that removal
-record while membership is inactive. Resuming requires a new snapshot. After an
-authorization failure, clients suspend use of private cached content until they
-reconcile access.
+A key acts for its account, limited to its projects if the user chose some.
+Servers store only hashes of codes and keys, each with at least 128 bits of
+randomness, and let users list and revoke keys. They check the key and the
+account's membership on every request.
 
-Project updates create proposed local plan revisions. They do not replace active
-acquisition programs. Submissions identify the requirements used for each capture.
-Access removal preserves local captures and provenance.
+Clients store keys in the system credential store and send them only in the
+`Authorization` header, over HTTPS, to the server's own origin. Keys never go in
+URLs, manifests or logs.
 
-## 9. Calibrated artifacts and resumable transfer
+## 4. Projects and membership
 
-A submission contains an immutable manifest: client-assigned UUID, participation,
-project revision, objectives and artifacts. Each artifact identifies its capture,
-raw/calibrated SHA-256 hashes, equipment revision, exposure, bandpass, time,
-processing state and calibration history. Record master roles/hashes, operations,
-parameters and software versions. Listing a hash does not request the raw or
-master file. Measurements include method, version, unit, value and time. Fresh
-solves identify the submitted artifact hash; embedded WCS remains advisory.
+Users join projects on the server's web pages, where they accept the project's
+terms. `GET /me/projects` lists the projects the account has joined, with its
+membership state. Only `active` members receive assignments and submit data.
+When a client learns that membership is no longer active, it stops starting new
+work for that project.
 
-Submission creation returns an authenticated upload session per artifact: total
-bytes, server-selected part size/count, expiry and received parts. Number parts
-from 1. All parts except the last contain exactly `part_size_bytes`; the last contains the remainder.
-Parts may arrive out of order.
+`GET /projects/{id}` returns the project's current requirements and their
+`revision`, which rises whenever the owners publish changes. Submissions name the
+revision their frames were taken for. A later revision MUST NOT change how data
+taken for an earlier one is judged.
 
-Send binary parts to `PUT /uploads/{id}/parts/{number}` with `Content-Length` and
-lowercase hexadecimal `X-Part-SHA256`. The server verifies size and hash, then
-records the part atomically. Identical retries return the same receipt. Changed
-bytes for an acknowledged part return `409 part_conflict`. Bad hashes return
-`422 digest_mismatch` without recording the part; clients may retry correct bytes.
+Requirements contain:
 
-Read received parts with `GET /uploads/{id}`. Renewal checks permission and quota,
-then extends the same session without changing its manifest or part size. Expired
-sessions reject writes until renewal. Servers retain uncommitted bytes for the
-advertised staging period. After cleanup, renewal returns an empty part inventory.
-Finalizing or finalized uploads cannot change or renew.
+- **Targets:** each with a footprint on the sky.
+- **Objectives:** for a target, the accepted passbands, exposure range,
+  processing group, minimum coverage, quality rules and goal. The goal, in frames,
+  seconds of integration or both, is the depth every part of the target needs.
+- **Processing groups:** sampling range, color state and calibration steps.
+- **Terms, deadlines and `deliverable`:** `calibrated_subs` (each calibrated
+  exposure as its own file) or `stacked_masters` (masters the contributor stacks,
+  with `master_rules`).
+- **`external_delivery`**, when the project accepts files shared outside the API.
 
-Finalization checks completeness and atomically creates one verification and
-assessment job. Return `409 upload_incomplete` for missing parts. Otherwise return
-`202` and the same job on retry, even after completion. Clients read current
-results from `GET /submissions/{id}`. Workers hash, decode and assess each artifact.
-A whole-file hash mismatch rejects that artifact with `digest_mismatch`; other
-artifacts continue. To replace a corrupt artifact, submit a new artifact ID and
-manifest while retaining capture identity.
+Captures must start before `capture_deadline`; submissions must be finalized
+before `submission_deadline`. Both bounds are exclusive.
 
-Creating the same submission UUID with the same manifest returns the existing
-submission. Different content conflicts regardless of idempotency-key retention.
-At creation, renewal and finalization, check membership, current terms consent,
-revision deadlines and quota. Revocation also stops part writes. This draft uses
-no presigned storage URLs. Servers may finish previously finalized assessments
-under recorded consent; revoked keys cannot read private results.
+## 5. Rigs
 
-Artifacts progress through `uploading -> received -> validating -> accepted|rejected`.
-Externally delivered artifacts start at `awaiting_retrieval` instead (see below).
-Only acceptance of a replacement changes an accepted artifact to `superseded`.
-Submissions use `uploading`, `processing` or `complete` and report each artifact's
-result, including partial failures.
+A rig belongs to the account and serves every project it joins. The user may set
+it up on the web, the client may register it with `PUT /me/equipment/{id}`, or
+both. `PATCH` with a JSON merge patch changes only the fields sent, so a rig can
+report its focal length without erasing filters entered on the web.
 
-### External delivery
+Only the name is required. To plan for a rig, the server needs the unbinned
+sensor size, pixel size, focal length, color state and at least one filter.
+Optional fields include binning, camera and telescope names, rotation and an
+approximate site. Field of view depends on sensor size, pixel size and focal
+length; sampling also depends on binning.
 
-A project may accept files that contributors share outside the API, such as in a
-Google Drive folder. Its requirements then include `external_delivery`, which
-lists the accepted providers and tells contributors how to share. Without it,
-servers reject external artifacts with `422 external_delivery_not_accepted`.
+Each filter has a stable ID and a list of passbands, each with a name, center
+wavelength and, when known, width. A narrowband or luminance filter has one
+passband; a dual-narrowband filter on a color camera has two. Filters may also
+give their kind, maker and model.
 
-To register a shared file, the manifest artifact sets `delivery: external` and
-gives an `external` location: provider, HTTPS link, optional file ID and share
-time. It still carries the file's hash, size and full calibration history. The
-server creates no upload session for it. The artifact starts at
-`awaiting_retrieval`, and finalization treats it as complete.
+A changed description creates a new revision; an identical one does not. Servers
+keep every revision that an assignment or submission cites.
 
-After finalization, someone must fetch the file and check it against the manifest:
+## 6. Assignments
 
-- A maintainer downloads it and calls
-  `POST /submissions/{id}/artifacts/{artifact_id}/retrieval` with the outcome,
-  the hash and size of the bytes, and the time. `verified` requires a match and
-  moves the artifact to `validating`. `unavailable` and `digest_mismatch` reject
-  the artifact.
-- A server MAY fetch files itself, but only over HTTPS from the hosts it lists
-  in `external_retrieval_hosts`. It never sends its own credentials to those
-  hosts and applies the same size and decoding limits as for uploads.
+### Asking for work
 
-Assessment and credit then follow the same rules as for uploaded files. Links may
-grant access to the file: show them only to the submitter and to keys with
-`submission:read-all`, and never in public activity or progress. To replace a
-rejected file, submit a new artifact ID with the same capture identity.
+A rig asks what to image with `POST /me/checkins`, naming its equipment ID. It
+may limit the choice to some projects and name the assignment it is working on.
+The server answers with one of three actions:
 
-Servers append automated or authorized human assessments with an ID, policy
-revision, evidence, decision, reasons and per-objective credit. Manual writes
-require the submission ETag and can assess only validated artifacts. Rejection
-grants no credit. Acceptance requires the published evidence and compatibility
-checks, regardless of the assessor's role.
+| Action | Meaning |
+| --- | --- |
+| `image` | `assignment` holds new work. Start it at a safe point. |
+| `continue` | Keep working on the current assignment. |
+| `wait` | Nothing suits this rig now. `reason_codes` say why, such as `rig_incomplete`, `no_matching_filter`, `sampling_out_of_range` or `goals_met`. |
 
-Recalibration uses a new artifact ID, `supersedes_artifact_id` and the same capture
-identity. Acceptance atomically replaces old credit; rejection preserves it.
-Reassessment appends history and may reverse acceptance, subtracting credit once.
-Servers enforce unique credit per project/objective/capture and reject conflicting
-duplicates pending attribution review. Do not reveal another user's private
-manifest when resolving duplicate hashes.
+Each answer gives `next_checkin_seconds`. The server decides; there is no
+proposal for the client to accept or reject. A repeated check-in creates nothing
+new.
 
-Progress records a server event sequence and separate totals for goals, current
-intent, reported captures, pending, accepted, rejected and surplus data. Surplus
-may receive attribution but does not count toward required completion. Project
-integration counts each credited capture once across overlapping objectives.
+### Reporting progress before upload
 
-## 10. Scope and unresolved deployment choices
+A rig may capture for days before it submits, and in a masters project subs wait
+until there are enough to stack. A check-in reports this with
+`unsubmitted_captures`: for each panel, the frames and integration captured but
+not yet submitted, and when the last one was taken. Each report is a total that
+replaces the rig's previous one, so repeating it changes nothing. A rig sends
+`[]` once everything is submitted.
 
-This draft excludes equipment control, centralized scheduling, federation,
-raw-image ingestion, dataset downloads, payments and a required quality algorithm.
-Servers publish their signup rules, quotas, terms, assessment methods and retention
-policies, and choose their storage backend.
+The server counts reported frames when it hands out panels, so it does not send
+more rigs to a panel whose data is already on its way, and shows them in
+progress as `reported_frames`. Reported frames earn no credit; only submitted,
+accepted data does. Servers MAY stop counting a report that is not followed by
+submissions, for example after the submission deadline or a period they
+publish.
 
-Before releasing v1, test the [conformance scenarios](conformance.md) with two
-independent clients and a server. Review metric identifiers, spherical coverage
-and device authorization. Decide whether dataset downloads belong in v1 or an
-optional extension. Schema checks alone do not establish interoperability.
+### How the server assigns work
+
+The server picks the project and panel where the rig adds most, using what the
+rig advertises:
+
+| Rig capability | Used for |
+| --- | --- |
+| Field of view | Panel size: whole targets for wide rigs, single panels for long ones. |
+| Sampling | Objectives whose sampling range the rig meets. |
+| Filters and passbands | Objectives the rig can serve. A dual-band filter can serve two objectives in the same frames. |
+| Color state | Objectives whose processing group accepts mono or color data. |
+| Rotation and angle | Panel angle: fixed cameras keep their angle. |
+| Site, when given | Targets that rise high enough there. |
+
+A filter serves an objective when one of its passbands matches one of the
+objective's accepted passbands: its center lies inside the accepted band and,
+when both widths are known, its width is between a quarter of the accepted width
+and the full accepted width. When the accepted band gives no width, centers must
+agree within 5 nm. So a 3 nm H-alpha filter serves a 7 nm H-alpha objective, but
+a narrowband filter does not serve a 300 nm luminance objective.
+
+For a target larger than a rig's field, the server lays a grid of panels over it.
+Each panel needs the objective's full goal, and the objective is complete when
+every panel is. The server tracks depth per panel and hands each rig the panels
+that most need data, so no rig has to build a whole mosaic. Rigs with similar
+fields SHOULD share a grid, but a rig only gets panels that fit its own field.
+`Panel.layout` gives a panel's column and row.
+
+An assignment usually holds one panel. It may list a few, in order, when the
+first will be done before the night ends; the rig moves on when the current
+panel has its suggested frames. Each panel gives where to point, the filter, the
+exposure, the suggested frame count and the objectives it serves. Every panel
+MUST fit the rig's field, use one of its filters, and meet the objective's
+sampling and exposure rules.
+
+Assignments reserve nothing. Two rigs may get overlapping panels, and useful data
+from both counts.
+
+### Client duties
+
+Clients check each assignment against their own safety limits before use. They
+stop starting new frames for an assignment after its `expires_at`, never change
+an exposure already in progress, and keep the assignment and panel IDs with each
+capture.
+
+## 7. Submissions
+
+### Manifest
+
+A submission is an immutable manifest for one project, with a client-chosen
+`id`, the project revision and up to 100 artifacts. An artifact is one file:
+
+- **Calibrated sub** (`kind: calibrated_sub`): one exposure, with its capture
+  identity, raw and calibrated hashes, rig revision, filter and passbands,
+  exposure, capture time, calibration history and measurements.
+- **Stacked master** (`kind: stacked_master`): a registered, linear master with a
+  `stack` block listing every sub in it by capture identity, time and hash, the
+  sub count and total integration, and how the subs were registered, normalized,
+  rejected and weighted. All subs share one exposure length.
+
+Calibration history records each calibration frame's role and hash, the
+operations, parameters and software versions. Darks and flats are never sent.
+A `fresh_pixel_solve` must solve the submitted pixels; headers and predicted
+coordinates do not count.
+
+Servers reject an artifact whose kind does not match the project's
+`deliverable` with `422 deliverable_mismatch`. A master needs at least
+`master_rules.min_sub_count` subs (`422 too_few_subs`), a `sub_count` equal to
+its list and an integration equal to `sub_count` × `exposure_seconds`
+(`422 invalid_stack`), and `allow_drizzle` if drizzled
+(`422 drizzle_not_allowed`).
+
+### Upload
+
+Each artifact arrives one of two ways, for subs and masters alike:
+
+- **`upload`:** the server returns an upload session with a fixed part size. The
+  client sends `PUT /uploads/{id}/parts/{n}` with the raw bytes,
+  `Content-Length` and lowercase hex `X-Part-SHA256`. Parts are numbered from 1;
+  all but the last have exactly `part_size_bytes`. Parts may arrive in any order.
+  The server checks size and hash and records each part atomically: the same
+  bytes return the same receipt, different bytes for a received part return
+  `409 part_conflict`, and a bad hash returns `422 digest_mismatch` without
+  recording the part. `GET /uploads/{id}` lists received parts. Each accepted part
+  extends the session; an idle session expires after the staging period, and the
+  client then submits again under a new ID.
+- **`external`:** the file is shared outside the API, if the project's
+  `external_delivery` lists the provider (otherwise
+  `422 external_delivery_not_accepted`). The location gives the provider, an
+  HTTPS link and the share time. The link may point at a shared folder, with
+  `path` naming the file inside it. There is no upload session; the artifact
+  waits in `awaiting_retrieval` until the project fetches the file and checks its
+  hash. A server fetches files itself only over HTTPS from hosts it lists in
+  `external_retrieval_hosts`. Links may grant access: only the submitter and the
+  project's maintainers may see them.
+
+`POST /submissions/{id}/finalize` checks that every upload is complete
+(`409 upload_incomplete` otherwise) and starts assessment. It returns `202` with
+the submission in `processing`. Clients read `GET /submissions/{id}` until it is
+`complete`; each artifact then shows `accepted` or `rejected` with reason codes
+and the credit it earned. One bad file does not hold up the rest.
+
+At creation, part writes and finalization, servers check membership, current
+terms consent, deadlines and quota. If the terms changed, finalization returns
+`409 terms_consent_required` until the user accepts them on the web; staged
+bytes are kept.
+
+## 8. Assessment and credit
+
+The server assesses each artifact against the requirements of the revision it
+names: hashes, passbands, sampling, exposure, coverage of its panel, required
+evidence and quality rules. Missing required evidence fails; missing optional
+evidence does not. Only accepted artifacts earn credit. Maintainers may also
+assess by hand with the server's own tools, under the same rules.
+
+Credit counts subs and seconds of integration. An accepted sub credits one frame
+and its exposure; an accepted master credits its sub count and integration. A
+sub earns credit once per project, whether alone or inside a master: a master
+that repeats a credited sub is rejected with `duplicate_capture`. Assessment
+judges a master's pixels as a whole; the sub list is the contributor's claim.
+One frame may credit several objectives when its filter serves them all.
+
+To replace a file, submit a new artifact ID with `supersedes_artifact_id` and the
+same capture identity; acceptance replaces the old credit, rejection keeps it.
+Frames accepted after a panel's goal is met count as surplus: credited to the
+contributor, not to the goal.
+
+`GET /projects/{id}/progress` shows each objective's goal and its assigned,
+reported, pending, accepted, rejected and surplus frames, and whether every panel has the
+goal's depth. Only accepted data counts toward a goal.
+
+## 9. Retries
+
+Every request is safe to repeat as is. There are no idempotency keys and no
+preconditions.
+
+| Request | Why a repeat is safe |
+| --- | --- |
+| Create a submission | The client picks the `id`. The same `id` and body returns the existing submission with `200`; a different body returns `409 id_conflict`. |
+| `PUT` and `PATCH` a rig | They set the same values again; no new revision. |
+| Upload a part | The same bytes return the same receipt. |
+| Finalize | Returns the same submission. |
+| Check in | Creates nothing new; a capture report replaces the last one. |
+| Pair | Never repeated automatically; see section 3. |
+
+## 10. Out of scope
+
+This draft leaves out equipment control, central scheduling, federation, raw
+image upload, dataset downloads, payments, a required quality algorithm, and the
+owner and maintainer tools for running projects. Servers publish their signup
+rules, quotas, terms, assessment methods and retention policies.

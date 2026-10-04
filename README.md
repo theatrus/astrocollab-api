@@ -1,17 +1,24 @@
 # AstroCollab API
 
-An API specification for collaborative astrophotography. Project owners define
-required frames. Participants offer equipment and time, receive framing
-recommendations, and submit calibrated exposures for assessment.
+An API for many astrophotographers to build one picture together. A project
+sets out the picture: its targets, filters and depth. Each contributor's rig
+asks the server what to image, gets the part of the picture that most needs
+data and suits the rig, and sends back calibrated subs or stacked masters. The
+server checks them and credits accepted data toward the shared goal.
+
+The API covers what a contributor's client calls: 15 operations. Servers run
+signup, project setup and review with their own tools.
 
 **0.1.0-draft.1.** Only a local reference server exists. The draft may change incompatibly.
 
 [Documentation and API reference](https://theatrus.github.io/astrocollab-api/)
 
-- [How the API works](spec/overview.md): one participant's requests, step by step.
-- [Authentication](spec/authentication.md): API keys and scopes.
+- [How the API works](spec/overview.md): one contributor's requests, step by step.
+- [Authentication](spec/authentication.md): pairing and API keys.
 - [Walkthrough](spec/walkthrough.md): every example payload, in order.
 - [Protocol](spec/protocol.md): the rules servers and clients must follow.
+- [REST reference](spec/api.md): every route, its bodies, responses and examples.
+- [JSON Schemas](schemas): one standalone JSON Schema 2020-12 file per type.
 - [TypeSpec source](typespec) and generated [OpenAPI](openapi/astrocollab.yaml).
 - [Reference server](reference/README.md) and example client.
 - [Conformance tester](conformance/README.md): checks servers and clients.
@@ -21,14 +28,10 @@ recommendations, and submit calibrated exposures for assessment.
 
 ## Behavior
 
-Each project has one server. Participants retain local equipment control.
-API keys permit project access and submissions; they grant no target locks.
-The server credits only assessed, compatible captures and counts each exposure
-once in project integration totals.
-
-Equipment registration and check-ins can recommend new framing as coverage needs
-change. Participants can approve automatic updates within equipment, sky-region,
-rotation and monthly-time limits.
+Each project has one server. Contributors keep control of their equipment; the
+server assigns work but never commands a rig or reserves a target. It credits
+only assessed data and counts each sub once, whether it arrives alone or inside
+a master.
 
 The protocol originated in PSF Guard. It requires no particular client,
 scheduler, camera software or catalog format.
@@ -58,8 +61,10 @@ python tools/build_openapi.py
 python tools/validate.py
 ```
 
-The build compiles TypeSpec, closes every object schema and adds the request and
-response examples from `examples/`. CI fails if the committed OpenAPI file is
+The build compiles TypeSpec and writes three outputs: the OpenAPI file, with
+every object schema closed and examples from `examples/`; standalone JSON
+Schemas in `schemas/`; and the Markdown REST reference, `spec/api.md`. The
+schemas and the reference need no OpenAPI tools. CI fails if any output is
 stale.
 
 ## Documentation site

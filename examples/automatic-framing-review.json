@@ -1,8 +1,0 @@
-{
-  "action": "review_required",
-  "demand_sequence": 45,
-  "next_checkin_seconds": 600,
-  "reason_codes": [
-    "manual_rotation_required"
-  ]
-}

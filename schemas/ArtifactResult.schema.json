@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://theatrus.github.io/astrocollab-api/schemas/ArtifactResult.schema.json",
+  "title": "ArtifactResult",
+  "type": "object",
+  "required": [
+    "artifact_id",
+    "state",
+    "reason_codes"
+  ],
+  "properties": {
+    "artifact_id": {
+      "$ref": "Uuid.schema.json"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "uploading",
+        "awaiting_retrieval",
+        "received",
+        "validating",
+        "accepted",
+        "rejected",
+        "superseded"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "Text.schema.json"
+      },
+      "minItems": 0,
+      "maxItems": 32,
+      "description": "Why a file was rejected, such as `digest_mismatch` or `quality_limit`."
+    },
+    "credited_frames": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Subs credited toward the goal: 1 for a sub, the accepted count for a master."
+    },
+    "credited_integration_seconds": {
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "description": "What happened to one file.",
+  "additionalProperties": false
+}

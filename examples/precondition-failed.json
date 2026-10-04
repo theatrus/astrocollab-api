@@ -1,8 +1,0 @@
-{
-  "type": "https://collab.example/problems/precondition-failed",
-  "title": "Precondition failed",
-  "status": 412,
-  "code": "precondition_failed",
-  "detail": "The resource changed since you read it. Read it again and reapply your change.",
-  "request_id": "00000000-0000-4000-8000-000000000090"
-}
