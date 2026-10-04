@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Checkin.schema.json",
+  "$id": "https://astrocollabapi.com/schemas/Checkin.schema.json",
   "title": "Checkin",
   "type": "object",
   "required": [

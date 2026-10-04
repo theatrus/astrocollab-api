@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Stack.schema.json",
+  "$id": "https://astrocollabapi.com/schemas/Stack.schema.json",
   "title": "Stack",
   "type": "object",
   "required": [

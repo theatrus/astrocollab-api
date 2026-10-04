@@ -1,5 +1,13 @@
 # AstroCollab API
 
+**This is a spec, not an implementation** (0.1.0-draft.1). AstroCollab is meant to be
+built into capture software people already use, such as N.I.N.A., and into
+servers that run projects. No capture software or public server supports it yet.
+This repository holds the specification, plus an example server and client for
+testing and for implementers to read. The draft may change incompatibly.
+
+**[astrocollabapi.com](https://astrocollabapi.com/)**: guides, REST reference and JSON Schemas.
+
 Shoot one deep target with other astrophotographers. A project, such as a
 600-hour H-alpha mosaic of M31, sets the targets, filters and hours each panel
 needs. At dusk each rig asks the server what to shoot and gets the panel and
@@ -10,14 +18,6 @@ single backyard could build.
 This repository specifies the API that capture software uses: 15 REST calls to
 pair a rig, ask for work and upload subs. Servers run signup, projects and
 review with their own tools.
-
-**0.1.0-draft.1: a specification, not a product.** AstroCollab is meant to be
-built into capture software people already use, such as N.I.N.A., and into
-servers that run projects. No capture software or public server supports it yet.
-This repository holds the specification, plus an example server and client for
-testing and for implementers to read. The draft may change incompatibly.
-
-[Documentation and API reference](https://theatrus.github.io/astrocollab-api/)
 
 - [How the API works](spec/overview.md): one contributor's requests, step by step.
 - [Authentication](spec/authentication.md): pairing and API keys.
@@ -76,7 +76,7 @@ stale.
 
 ## Documentation site
 
-The [site](https://theatrus.github.io/astrocollab-api/) renders the API reference
+The [site](https://astrocollabapi.com/) renders the API reference
 from OpenAPI and guides from Markdown. It uses no external fonts, CDN or analytics.
 
 ```sh

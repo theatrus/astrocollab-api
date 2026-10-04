@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Target.schema.json",
+  "$id": "https://astrocollabapi.com/schemas/Target.schema.json",
   "title": "Target",
   "type": "object",
   "required": [

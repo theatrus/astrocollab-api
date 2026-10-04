@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://theatrus.github.io/astrocollab-api/schemas/CalibrationFrame.schema.json",
+  "$id": "https://astrocollabapi.com/schemas/CalibrationFrame.schema.json",
   "title": "CalibrationFrame",
   "type": "object",
   "required": [

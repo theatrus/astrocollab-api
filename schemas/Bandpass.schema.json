@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Bandpass.schema.json",
+  "$id": "https://astrocollabapi.com/schemas/Bandpass.schema.json",
   "title": "Bandpass",
   "type": "object",
   "required": [

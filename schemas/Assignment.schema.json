@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://theatrus.github.io/astrocollab-api/schemas/Assignment.schema.json",
+  "$id": "https://astrocollabapi.com/schemas/Assignment.schema.json",
   "title": "Assignment",
   "type": "object",
   "required": [

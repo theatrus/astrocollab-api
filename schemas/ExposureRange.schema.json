@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://theatrus.github.io/astrocollab-api/schemas/ExposureRange.schema.json",
+  "$id": "https://astrocollabapi.com/schemas/ExposureRange.schema.json",
   "title": "ExposureRange",
   "type": "object",
   "required": [

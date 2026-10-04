@@ -135,7 +135,7 @@ def main() -> None:
         Draft202012Validator.check_schema(schema)
         standalone[schema["$id"]] = Resource.from_contents(schema)
     registry = Registry().with_resources(standalone.items())
-    base = "https://theatrus.github.io/astrocollab-api/schemas/"
+    base = "https://astrocollabapi.com/schemas/"
     for entry in manifest:
         schema = standalone[f"{base}{entry['schema']}.schema.json"].contents
         value = fixtures[entry["file"]][1]

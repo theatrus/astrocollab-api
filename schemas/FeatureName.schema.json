@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://theatrus.github.io/astrocollab-api/schemas/FeatureName.schema.json",
+  "$id": "https://astrocollabapi.com/schemas/FeatureName.schema.json",
   "title": "FeatureName",
   "type": "string",
   "pattern": "^[a-z][a-z0-9_.-]{0,63}$"

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://theatrus.github.io/astrocollab-api/schemas/PairedKey.schema.json",
+  "$id": "https://astrocollabapi.com/schemas/PairedKey.schema.json",
   "title": "PairedKey",
   "type": "object",
   "required": [

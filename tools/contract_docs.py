@@ -9,7 +9,7 @@ import copy
 import json
 from pathlib import Path
 
-SCHEMA_BASE = "https://theatrus.github.io/astrocollab-api/schemas/"
+SCHEMA_BASE = "https://astrocollabapi.com/schemas/"
 METHODS = ("get", "put", "patch", "post", "delete")
 TAG_TITLES = {
     "capabilities": "Discovery",
