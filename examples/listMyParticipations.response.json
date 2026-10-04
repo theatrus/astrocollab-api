@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "id": "00000000-0000-4000-8000-000000000003",
+      "project_id": "00000000-0000-4000-8000-000000000001",
+      "account_id": "00000000-0000-4000-8000-000000000002",
+      "role": "contributor",
+      "state": "active",
+      "revision": 1,
+      "accepted_terms": {
+        "id": "00000000-0000-4000-8000-000000000019",
+        "version": 1,
+        "url": "https://collab.example/terms/m31/1",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "updated_at": "2026-10-04T04:00:00Z"
+    }
+  ],
+  "next_cursor": null
+}

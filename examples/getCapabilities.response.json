@@ -1,0 +1,30 @@
+{
+  "server_id": "00000000-0000-4000-8000-000000000099",
+  "api_root": "https://collab.example/v1",
+  "protocol_versions": [
+    "v1"
+  ],
+  "spec_version": "0.1.0-draft.1",
+  "features": [
+    "recommendations"
+  ],
+  "account_url": "https://collab.example/account",
+  "oauth_issuer": "https://auth.collab.example",
+  "oauth_metadata_url": "https://auth.collab.example/.well-known/oauth-authorization-server",
+  "account_resource": "https://collab.example/v1/account",
+  "artifact_formats": [
+    "fits",
+    "xisf"
+  ],
+  "limits": {
+    "max_json_bytes": 1048576,
+    "max_artifacts_per_submission": 100,
+    "max_artifact_bytes": 2147483648,
+    "max_chunk_bytes": 8388608,
+    "idempotency_retention_seconds": 86400,
+    "snapshot_ttl_seconds": 900,
+    "change_retention_seconds": 2592000,
+    "upload_staging_seconds": 604800,
+    "max_decoded_pixels": 200000000
+  }
+}

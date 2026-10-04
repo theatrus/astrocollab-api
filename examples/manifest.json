@@ -1,0 +1,463 @@
+[
+  {
+    "file": "getCapabilities.response.json",
+    "schema": "Capabilities",
+    "operationId": "getCapabilities",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "listProjects.response.json",
+    "schema": "ProjectPage",
+    "operationId": "listProjects",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "createProject.response.json",
+    "schema": "ProjectCreated",
+    "operationId": "createProject",
+    "direction": "response",
+    "status": 201
+  },
+  {
+    "file": "createProject.request.json",
+    "schema": "ProjectCreate",
+    "operationId": "createProject",
+    "direction": "request"
+  },
+  {
+    "file": "getProject.response.json",
+    "schema": "Project",
+    "operationId": "getProject",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "getDraft.response.json",
+    "schema": "ProjectDraft",
+    "operationId": "getDraft",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "replaceDraft.response.json",
+    "schema": "ProjectDraft",
+    "operationId": "replaceDraft",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "replaceDraft.request.json",
+    "schema": "RequirementSet",
+    "operationId": "replaceDraft",
+    "direction": "request"
+  },
+  {
+    "file": "publishProject.response.json",
+    "schema": "ProjectRevision",
+    "operationId": "publishProject",
+    "direction": "response",
+    "status": 201
+  },
+  {
+    "file": "getProjectRevision.response.json",
+    "schema": "ProjectRevision",
+    "operationId": "getProjectRevision",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "listTargets.response.json",
+    "schema": "TargetPage",
+    "operationId": "listTargets",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "listObjectives.response.json",
+    "schema": "ObjectivePage",
+    "operationId": "listObjectives",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "joinProject.response.json",
+    "schema": "Participation",
+    "operationId": "joinProject",
+    "direction": "response",
+    "status": 201
+  },
+  {
+    "file": "joinProject.request.json",
+    "schema": "JoinRequest",
+    "operationId": "joinProject",
+    "direction": "request"
+  },
+  {
+    "file": "listProjectParticipations.response.json",
+    "schema": "ParticipationPage",
+    "operationId": "listProjectParticipations",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "listMyParticipations.response.json",
+    "schema": "ParticipationPage",
+    "operationId": "listMyParticipations",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "getParticipation.response.json",
+    "schema": "Participation",
+    "operationId": "getParticipation",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "changeParticipation.response.json",
+    "schema": "Participation",
+    "operationId": "changeParticipation",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "changeParticipation.request.json",
+    "schema": "ParticipationAction",
+    "operationId": "changeParticipation",
+    "direction": "request"
+  },
+  {
+    "file": "reviewParticipation.response.json",
+    "schema": "Participation",
+    "operationId": "reviewParticipation",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "reviewParticipation.request.json",
+    "schema": "ParticipationReview",
+    "operationId": "reviewParticipation",
+    "direction": "request"
+  },
+  {
+    "file": "issueParticipationToken.response.json",
+    "schema": "TokenIssued",
+    "operationId": "issueParticipationToken",
+    "direction": "response",
+    "status": 201
+  },
+  {
+    "file": "issueParticipationToken.request.json",
+    "schema": "TokenRequest",
+    "operationId": "issueParticipationToken",
+    "direction": "request"
+  },
+  {
+    "file": "listParticipationTokens.response.json",
+    "schema": "TokenPage",
+    "operationId": "listParticipationTokens",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "registerEquipment.response.json",
+    "schema": "EquipmentRegistered",
+    "operationId": "registerEquipment",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "registerEquipment.request.json",
+    "schema": "EquipmentInput",
+    "operationId": "registerEquipment",
+    "direction": "request"
+  },
+  {
+    "file": "getEquipment.response.json",
+    "schema": "Equipment",
+    "operationId": "getEquipment",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "getEquipmentRevision.response.json",
+    "schema": "Equipment",
+    "operationId": "getEquipmentRevision",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "setCapacity.response.json",
+    "schema": "Capacity",
+    "operationId": "setCapacity",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "setCapacity.request.json",
+    "schema": "CapacityInput",
+    "operationId": "setCapacity",
+    "direction": "request"
+  },
+  {
+    "file": "getCapacity.response.json",
+    "schema": "Capacity",
+    "operationId": "getCapacity",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "getCapacityRevision.response.json",
+    "schema": "Capacity",
+    "operationId": "getCapacityRevision",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "setPlanningPolicy.response.json",
+    "schema": "PlanningPolicy",
+    "operationId": "setPlanningPolicy",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "setPlanningPolicy.request.json",
+    "schema": "PlanningPolicyInput",
+    "operationId": "setPlanningPolicy",
+    "direction": "request"
+  },
+  {
+    "file": "getPlanningPolicy.response.json",
+    "schema": "PlanningPolicy",
+    "operationId": "getPlanningPolicy",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "getPlanningPolicyRevision.response.json",
+    "schema": "PlanningPolicy",
+    "operationId": "getPlanningPolicyRevision",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "checkIn.response.json",
+    "schema": "Advice",
+    "operationId": "checkIn",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "checkIn.request.json",
+    "schema": "Checkin",
+    "operationId": "checkIn",
+    "direction": "request"
+  },
+  {
+    "file": "requestRecommendation.response.json",
+    "schema": "Job",
+    "operationId": "requestRecommendation",
+    "direction": "response",
+    "status": 202
+  },
+  {
+    "file": "requestRecommendation.request.json",
+    "schema": "RecommendationRequest",
+    "operationId": "requestRecommendation",
+    "direction": "request"
+  },
+  {
+    "file": "setIntent.response.json",
+    "schema": "Intent",
+    "operationId": "setIntent",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "setIntent.request.json",
+    "schema": "IntentInput",
+    "operationId": "setIntent",
+    "direction": "request"
+  },
+  {
+    "file": "getIntent.response.json",
+    "schema": "Intent",
+    "operationId": "getIntent",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "reportStatus.response.json",
+    "schema": "StatusReceipt",
+    "operationId": "reportStatus",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "reportStatus.request.json",
+    "schema": "StatusInput",
+    "operationId": "reportStatus",
+    "direction": "request"
+  },
+  {
+    "file": "listActivity.response.json",
+    "schema": "ActivityPage",
+    "operationId": "listActivity",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "getProgress.response.json",
+    "schema": "Progress",
+    "operationId": "getProgress",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "createSnapshot.response.json",
+    "schema": "SnapshotPage",
+    "operationId": "createSnapshot",
+    "direction": "response",
+    "status": 201
+  },
+  {
+    "file": "createSnapshot.request.json",
+    "schema": "SnapshotRequest",
+    "operationId": "createSnapshot",
+    "direction": "request"
+  },
+  {
+    "file": "getSnapshotPage.response.json",
+    "schema": "SnapshotPage",
+    "operationId": "getSnapshotPage",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "getChanges.response.json",
+    "schema": "ChangePage",
+    "operationId": "getChanges",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "createSubmission.response.json",
+    "schema": "Submission",
+    "operationId": "createSubmission",
+    "direction": "response",
+    "status": 201
+  },
+  {
+    "file": "createSubmission.request.json",
+    "schema": "SubmissionCreate",
+    "operationId": "createSubmission",
+    "direction": "request"
+  },
+  {
+    "file": "listProjectSubmissions.response.json",
+    "schema": "SubmissionPage",
+    "operationId": "listProjectSubmissions",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "getSubmission.response.json",
+    "schema": "Submission",
+    "operationId": "getSubmission",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "getUpload.response.json",
+    "schema": "UploadSession",
+    "operationId": "getUpload",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "renewUpload.response.json",
+    "schema": "UploadSession",
+    "operationId": "renewUpload",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "putUploadPart.response.json",
+    "schema": "PartReceipt",
+    "operationId": "putUploadPart",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "finalizeSubmission.response.json",
+    "schema": "Job",
+    "operationId": "finalizeSubmission",
+    "direction": "response",
+    "status": 202
+  },
+  {
+    "file": "listAssessments.response.json",
+    "schema": "AssessmentPage",
+    "operationId": "listAssessments",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "appendAssessment.response.json",
+    "schema": "Assessment",
+    "operationId": "appendAssessment",
+    "direction": "response",
+    "status": 201
+  },
+  {
+    "file": "appendAssessment.request.json",
+    "schema": "AssessmentInput",
+    "operationId": "appendAssessment",
+    "direction": "request"
+  },
+  {
+    "file": "getJob.response.json",
+    "schema": "Job",
+    "operationId": "getJob",
+    "direction": "response",
+    "status": 200
+  },
+  {
+    "file": "recommendation.json",
+    "schema": "Recommendation"
+  },
+  {
+    "file": "terms-consent-required.json",
+    "schema": "Problem"
+  },
+  {
+    "file": "access-revoked.json",
+    "schema": "ChangePage"
+  },
+  {
+    "file": "automatic-framing-review.json",
+    "schema": "Advice"
+  },
+  {
+    "file": "mosaic-project-revision.json",
+    "schema": "ProjectRevision"
+  },
+  {
+    "file": "mosaic-equipment.json",
+    "schema": "Equipment"
+  },
+  {
+    "file": "mosaic-planning-policy.json",
+    "schema": "PlanningPolicy"
+  },
+  {
+    "file": "mosaic-recommendation.json",
+    "schema": "Recommendation"
+  },
+  {
+    "file": "recalibrated-submission.json",
+    "schema": "SubmissionCreate"
+  }
+]

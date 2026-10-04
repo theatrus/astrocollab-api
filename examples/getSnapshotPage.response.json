@@ -1,0 +1,158 @@
+{
+  "snapshot_id": "00000000-0000-4000-8000-000000000070",
+  "expires_at": "2026-10-04T04:15:00Z",
+  "items": [
+    {
+      "kind": "project",
+      "resource": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "owner_account_id": "00000000-0000-4000-8000-000000000050",
+        "title": "M31 deep H-alpha",
+        "visibility": "public",
+        "state": "open",
+        "current_revision": 1,
+        "updated_at": "2026-10-04T04:00:00Z"
+      }
+    },
+    {
+      "kind": "project_revision",
+      "resource": {
+        "project_id": "00000000-0000-4000-8000-000000000001",
+        "revision": 1,
+        "published_at": "2026-10-04T04:00:00Z",
+        "requirements": {
+          "title": "M31 deep H-alpha",
+          "description": "Calibrated linear mono data for the outer disk.",
+          "visibility": "public",
+          "enrollment": "open",
+          "state": "open",
+          "targets": [
+            {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "name": "M31 outer disk",
+              "footprint": {
+                "center": {
+                  "ra_degrees": 10.6847,
+                  "dec_degrees": 41.269
+                },
+                "width_degrees": 3.0,
+                "height_degrees": 2.0,
+                "position_angle_degrees": 0
+              }
+            }
+          ],
+          "processing_groups": [
+            {
+              "id": "00000000-0000-4000-8000-000000000006",
+              "name": "Linear mono wide field",
+              "sampling_arcsec_per_pixel": {
+                "min": 1,
+                "max": 3
+              },
+              "color_state": "mono",
+              "registration": "unregistered",
+              "linear": true,
+              "required_calibration_steps": [
+                "dark_subtract",
+                "flat_correct"
+              ]
+            }
+          ],
+          "objectives": [
+            {
+              "id": "00000000-0000-4000-8000-000000000005",
+              "target_id": "00000000-0000-4000-8000-000000000004",
+              "processing_group_id": "00000000-0000-4000-8000-000000000006",
+              "bandpass": {
+                "name": "H-alpha",
+                "center_nm": 656.3,
+                "width_nm": 3.0
+              },
+              "purpose": "deep",
+              "exposure": {
+                "min_seconds": 300,
+                "max_seconds": 600
+              },
+              "goal": {
+                "accepted_frames": 120,
+                "accepted_integration_seconds": 36000
+              },
+              "minimum_coverage_fraction": 0.95,
+              "fresh_pixel_solve": true,
+              "quality_rules": [
+                {
+                  "metric": "fwhm",
+                  "method": "example.psf",
+                  "method_version": "1",
+                  "unit": "arcsec",
+                  "required": false,
+                  "max_value": 4.0
+                }
+              ],
+              "required_features": []
+            }
+          ],
+          "terms": {
+            "id": "00000000-0000-4000-8000-000000000019",
+            "version": 1,
+            "url": "https://collab.example/terms/m31/1",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "capture_deadline": "2026-12-01T00:00:00Z",
+          "submission_deadline": "2026-12-15T00:00:00Z",
+          "surplus_policy": "retain_and_attribute",
+          "acceptance_policy_revision": 1,
+          "required_features": []
+        }
+      }
+    },
+    {
+      "kind": "participation",
+      "resource": {
+        "id": "00000000-0000-4000-8000-000000000003",
+        "project_id": "00000000-0000-4000-8000-000000000001",
+        "account_id": "00000000-0000-4000-8000-000000000002",
+        "role": "contributor",
+        "state": "active",
+        "revision": 1,
+        "accepted_terms": {
+          "id": "00000000-0000-4000-8000-000000000019",
+          "version": 1,
+          "url": "https://collab.example/terms/m31/1",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "updated_at": "2026-10-04T04:00:00Z"
+      }
+    },
+    {
+      "kind": "progress",
+      "resource": {
+        "project_id": "00000000-0000-4000-8000-000000000001",
+        "project_revision": 1,
+        "event_sequence": 42,
+        "as_of": "2026-10-04T04:00:00Z",
+        "objectives": [
+          {
+            "objective_id": "00000000-0000-4000-8000-000000000005",
+            "goal": {
+              "accepted_frames": 120,
+              "accepted_integration_seconds": 36000
+            },
+            "intended_frames": 0,
+            "captured_reported_frames": 0,
+            "received_pending_frames": 0,
+            "accepted_frames": 0,
+            "accepted_integration_seconds": 0,
+            "rejected_frames": 0,
+            "surplus_frames": 0,
+            "complete": false
+          }
+        ],
+        "distinct_credited_captures": 0,
+        "distinct_credited_integration_seconds": 0
+      }
+    }
+  ],
+  "next_page_cursor": null,
+  "changes_cursor": "EXAMPLE_CURSOR_AFTER_42"
+}

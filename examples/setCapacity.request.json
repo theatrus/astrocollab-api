@@ -1,0 +1,17 @@
+{
+  "month": "2026-10",
+  "timezone": "America/Los_Angeles",
+  "offered_rig_seconds": 36000,
+  "equipment_ids": [
+    "00000000-0000-4000-8000-000000000007"
+  ],
+  "availability": [
+    {
+      "start": "2026-10-05T03:00:00Z",
+      "end": "2026-10-05T08:00:00Z"
+    }
+  ],
+  "mode": "soft",
+  "reported_attempted_rig_seconds": 0,
+  "usage_observed_at": "2026-10-04T04:00:00Z"
+}

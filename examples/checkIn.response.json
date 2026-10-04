@@ -1,0 +1,9 @@
+{
+  "action": "recommendation_pending",
+  "demand_sequence": 42,
+  "next_checkin_seconds": 600,
+  "reason_codes": [
+    "coverage_changed"
+  ],
+  "job_id": "00000000-0000-4000-8000-000000000016"
+}

@@ -1,0 +1,9 @@
+{
+  "sequence": 1,
+  "observed_at": "2026-10-04T04:00:00Z",
+  "expires_at": "2026-10-04T05:00:00Z",
+  "phase": "acquiring",
+  "objective_id": "00000000-0000-4000-8000-000000000005",
+  "captured_reported_frames": 0,
+  "visibility": "private"
+}

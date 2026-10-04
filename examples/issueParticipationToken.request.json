@@ -1,0 +1,11 @@
+{
+  "scopes": [
+    "project:read",
+    "offer:write",
+    "intent:write",
+    "status:write",
+    "submission:write",
+    "submission:read-own"
+  ],
+  "expires_in": 900
+}

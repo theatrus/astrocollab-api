@@ -1,0 +1,22 @@
+[
+  {"name":"RA cannot be hours or 360 degrees at the upper boundary", "base":"getProjectRevision.response.json", "mutations":[{"op":"set","path":["requirements","targets",0,"footprint","center","ra_degrees"],"value":360}], "expected_validator":"exclusiveMaximum"},
+  {"name":"declination out of range", "base":"getProjectRevision.response.json", "mutations":[{"op":"set","path":["requirements","targets",0,"footprint","center","dec_degrees"],"value":91}], "expected_validator":"maximum"},
+  {"name":"goal must require frames or integration", "base":"getProjectRevision.response.json", "mutations":[{"op":"set","path":["requirements","objectives",0,"goal"],"value":{}}], "expected_validator":"anyOf"},
+  {"name":"participation token cannot request hardware scope", "base":"issueParticipationToken.request.json", "mutations":[{"op":"set","path":["scopes"],"value":["hardware:control"]}], "expected_validator":"enum"},
+  {"name":"project credential lifetime is bounded", "base":"issueParticipationToken.request.json", "mutations":[{"op":"set","path":["expires_in"],"value":86400}], "expected_validator":"maximum"},
+  {"name":"unknown request fields are rejected", "base":"setCapacity.request.json", "mutations":[{"op":"set","path":["exclusive_target_lock"],"value":true}], "expected_validator":"additionalProperties"},
+  {"name":"capacity cannot be negative", "base":"setCapacity.request.json", "mutations":[{"op":"set","path":["offered_rig_seconds"],"value":-1}], "expected_validator":"minimum"},
+  {"name":"months are bounded", "base":"setCapacity.request.json", "mutations":[{"op":"set","path":["month"],"value":"2026-13"}], "expected_validator":"pattern"},
+  {"name":"automatic framing requires approved sky regions", "base":"setPlanningPolicy.request.json", "mutations":[{"op":"set","path":["allowed_regions"],"value":[]}], "expected_validator":"minItems"},
+  {"name":"zero exposure is not a capture", "base":"createSubmission.request.json", "mutations":[{"op":"set","path":["artifacts",0,"exposure_seconds"],"value":0}], "expected_validator":"exclusiveMinimum"},
+  {"name":"malformed artifact digest", "base":"createSubmission.request.json", "mutations":[{"op":"set","path":["artifacts",0,"sha256"],"value":"not-a-digest"}], "expected_validator":"pattern"},
+  {"name":"origin identity is required", "base":"createSubmission.request.json", "mutations":[{"op":"remove","path":["artifacts",0,"origin_id"]}], "expected_validator":"required"},
+  {"name":"normalized pixels need ADU scale", "base":"createSubmission.request.json", "mutations":[{"op":"set","path":["artifacts",0,"calibration","pixel_unit"],"value":"normalized"}], "expected_validator":"required"},
+  {"name":"a rejection cannot carry credit", "base":"appendAssessment.request.json", "mutations":[{"op":"set","path":["decision"],"value":"rejected"},{"op":"set","path":["reasons"],"value":["quality_limit"]}], "expected_validator":"maxItems"},
+  {"name":"surplus cannot multiply completion credit", "base":"appendAssessment.request.json", "mutations":[{"op":"set","path":["credits",0,"surplus"],"value":true}], "expected_validator":"const"},
+  {"name":"pending recommendation needs a job", "base":"checkIn.response.json", "mutations":[{"op":"remove","path":["job_id"]}], "expected_validator":"required"},
+  {"name":"automatic eligibility cannot hide review reasons", "base":"recommendation.json", "mutations":[{"op":"set","path":["review_reasons"],"value":["manual_rotation_required"]}], "expected_validator":"maxItems"},
+  {"name":"final snapshot page needs a change cursor", "base":"createSnapshot.response.json", "mutations":[{"op":"remove","path":["changes_cursor"]}], "expected_validator":"required"},
+  {"name":"nonfinal snapshot cannot publish the change cursor", "base":"createSnapshot.response.json", "mutations":[{"op":"set","path":["next_page_cursor"],"value":"more"}], "expected_validator":"not"},
+  {"name":"successful job requires result", "base":"requestRecommendation.response.json", "mutations":[{"op":"set","path":["state"],"value":"succeeded"}], "expected_validator":"required"}
+]

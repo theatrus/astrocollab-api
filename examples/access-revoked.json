@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "sequence": 45,
+      "operation": "remove",
+      "kind": "project_access",
+      "project_id": "00000000-0000-4000-8000-000000000001",
+      "resource_id": "00000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "next_cursor": "EXAMPLE_CURSOR_AFTER_45",
+  "poll_after_seconds": 30
+}

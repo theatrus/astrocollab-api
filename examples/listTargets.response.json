@@ -1,0 +1,18 @@
+{
+  "items": [
+    {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "name": "M31 outer disk",
+      "footprint": {
+        "center": {
+          "ra_degrees": 10.6847,
+          "dec_degrees": 41.269
+        },
+        "width_degrees": 3.0,
+        "height_degrees": 2.0,
+        "position_angle_degrees": 0
+      }
+    }
+  ],
+  "next_cursor": null
+}

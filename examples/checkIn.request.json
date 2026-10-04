@@ -1,0 +1,13 @@
+{
+  "equipment": [
+    {
+      "equipment_id": "00000000-0000-4000-8000-000000000007",
+      "revision": 1
+    }
+  ],
+  "capacity_revision": 1,
+  "planning_policy_revision": 1,
+  "captured_reported_frames": 0,
+  "reported_attempted_rig_seconds": 0,
+  "observed_at": "2026-10-04T04:00:00Z"
+}
