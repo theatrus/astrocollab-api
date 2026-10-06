@@ -72,9 +72,6 @@
       },
       "joined": false,
       "collected": {},
-      "participants": 0,
-      "participantsOnline": 0,
-      "participantNames": [],
       "progress": {
         "L": {
           "goalHours": 20.0,
@@ -100,7 +97,10 @@
           "average": 0.0,
           "thinnest": 0.0
         }
-      }
+      },
+      "participants": 0,
+      "participantsOnline": 0,
+      "participantNames": []
     },
     {
       "id": "000000000002",
@@ -170,9 +170,6 @@
       },
       "joined": false,
       "collected": {},
-      "participants": 0,
-      "participantsOnline": 0,
-      "participantNames": [],
       "progress": {
         "H": {
           "goalHours": 10.0,
@@ -186,7 +183,10 @@
           "average": 0.0,
           "thinnest": 0.0
         }
-      }
+      },
+      "participants": 0,
+      "participantsOnline": 0,
+      "participantNames": []
     }
   ],
   "protocol": 1

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/DepthCell.schema.json",
+  "title": "DepthCell",
+  "type": "object",
+  "required": [
+    "ra",
+    "dec",
+    "width",
+    "height",
+    "row",
+    "column"
+  ],
+  "properties": {
+    "ra": {
+      "type": "number",
+      "format": "double"
+    },
+    "dec": {
+      "type": "number",
+      "format": "double"
+    },
+    "width": {
+      "type": "number",
+      "format": "double"
+    },
+    "height": {
+      "type": "number",
+      "format": "double"
+    },
+    "row": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "column": {
+      "type": "integer",
+      "format": "int32"
+    }
+  },
+  "description": "One cell of a depth map's fine grid."
+}

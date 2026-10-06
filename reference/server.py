@@ -228,6 +228,32 @@ class State:
                 hours[record["filter"]] = hours.get(record["filter"], 0.0) + record["seconds"] / 3600.0
         return {letter: round(value, 2) for letter, value in hours.items()}
 
+    def depth_map(self, project: dict[str, Any]) -> dict[str, Any] | None:
+        """Everybody's accepted seconds on a fine grid over the region, per filter."""
+        cells = rules.depth_grid(project["region"], project["kind"])
+        if not cells:
+            return None
+        depths = rules.depth(cells, self.accepted_records(project["id"]))
+        goals = project["goals"]
+        letters = list(goals) or sorted({letter for cell in depths for letter in cell})
+        seconds = {letter: [round(cell.get(letter, 0.0), 1) for cell in depths] for letter in letters}
+        return {
+            "region": project["region"],
+            "columns": max(c["column"] for c in cells) + 1,
+            "rows": max(c["row"] for c in cells) + 1,
+            "cells": [{key: c[key] for key in ("ra", "dec", "width", "height", "row", "column")}
+                      for c in cells],
+            "seconds": seconds,
+            "goals": goals,
+            "progress": rules.progress(goals, seconds),
+        }
+
+    @staticmethod
+    def chart_name(telescope: dict[str, Any]) -> str:
+        """What a telescope asked to be called on the chart, or its enrolled name."""
+        said = str((telescope.get("presence") or {}).get("telescope") or "").strip()[:60]
+        return said or telescope["name"]
+
     # -- dealing -----------------------------------------------------------
     def _current(self, share: dict[str, Any], night: str | None) -> bool:
         """Whether a share's list still holds for the night being asked about."""
@@ -359,6 +385,7 @@ class Api:
             ("POST", r"/api/v1/agent/hello", self.hello),
             ("GET", r"/api/v1/presence", self.presence),
             ("GET", r"/api/v1/agent/projects", self.open_projects),
+            ("GET", r"/api/v1/agent/projects/(?P<project_id>[^/]+)/depth", self.project_depth),
             ("POST", r"/api/v1/agent/projects/(?P<project_id>[^/]+)/join", self.join),
             ("GET", r"/api/v1/agent/task", self.tonight),
             ("POST", r"/api/v1/agent/task/(?P<task_id>[^/]+)", self.set_task_state),
@@ -459,7 +486,8 @@ class Api:
             if not telescope["seen"] or age > LISTED_SECONDS:
                 continue
             said = telescope.get("presence") or {}
-            rows.append({"id": telescope["id"], "name": telescope["name"], "owner": telescope["owner"],
+            rows.append({"id": telescope["id"], "name": self.state.chart_name(telescope),
+                         "enrolledAs": telescope["name"], "owner": telescope["owner"],
                          "ra": rules.number(said.get("ra")), "dec": rules.number(said.get("dec")),
                          "state": str(said.get("state") or ""), "target": str(said.get("target") or ""),
                          "project": str(said.get("project") or ""), "ageSeconds": int(round(age)),
@@ -492,9 +520,20 @@ class Api:
                 "collected": self.state.collected(project["id"]),
                 "participants": len(holders),
                 "participantsOnline": sum(1 for t in holders if now - t["seen"] <= ONLINE_SECONDS),
-                "participantNames": [t["name"] for t in holders],
+                "participantNames": [self.state.chart_name(t) for t in holders],
+                "progress": (self.state.depth_map(project) or {}).get("progress", {}),
             })
         return {"projects": listed, "protocol": PROTOCOL}
+
+    def project_depth(self, request, project_id: str) -> dict[str, Any]:
+        self._telescope(request)
+        project = self.state.projects.get(project_id)
+        if project is None:
+            raise Problem(404, "no such project")
+        grid = self.state.depth_map(project)
+        if grid is None:
+            raise Problem(409, "this project has no region to map")
+        return {"project": project["id"], "name": project["name"], **grid}
 
     def join(self, request, project_id: str) -> dict[str, Any]:
         telescope = self._telescope(request)
@@ -554,9 +593,15 @@ class Api:
         badness = rules.moon_badness(moon, moon_up)
         shares = self.state.shares_of(telescope["id"])
         for share in shares:
-            # A camera turned since its cells were cut gets them cut again.
+            # A camera turned by more than 2 degrees gets its cells cut again at
+            # once. A smaller change, past a plate solve's wobble, waits for the
+            # night to turn; a list held for tonight is never moved for it.
             fixed = rules.number(telescope["profile"].get("rotation"))
-            if fixed != share.get("tiledRotation") and rules.field(telescope["profile"]):
+            held_tonight = bool(share["share"]) and night and share["assignedNight"] == night
+            if ((rules.camera_turned(share.get("tiledRotation"), fixed)
+                 or (not held_tonight and rules.camera_turned(
+                     share.get("tiledRotation"), fixed, rules.SAME_CELL_DEGREES)))
+                    and rules.field(telescope["profile"])):
                 project = self.state.projects[share["project"]]
                 share.update({"cells": rules.tile(project["region"], project["kind"], telescope["profile"]),
                               "share": [], "tiledRotation": fixed})

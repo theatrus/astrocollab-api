@@ -269,6 +269,85 @@ def depth(cells: list[dict[str, Any]], records: list[dict[str, Any]],
 
 
 # ---------------------------------------------------------------------------
+# The depth map and progress
+# ---------------------------------------------------------------------------
+
+#: How many cells the depth map cuts a region's longer side into.
+DEPTH_CELLS = 16
+#: A cell this close to its goal counts as at the goal: the outer sliver of a
+#: frame is its overlap with the next, and flat-sky arithmetic is a few percent
+#: out at the corners of a tall region.
+AT_GOAL = 0.9
+
+
+def depth_grid(region: dict[str, Any], kind: str) -> list[dict[str, Any]]:
+    """A fine north-up grid over a region, for mapping depth.
+
+    The longer side is cut into DEPTH_CELLS; the shorter into as many cells of
+    about the same size as it takes to cover it. A `single` project is one cell,
+    the region itself. Returns [] when the region has no area.
+    """
+    width, height = abs(number(region.get("width")) or 0.0), abs(number(region.get("height")) or 0.0)
+    ra, dec = number(region.get("ra")), number(region.get("dec"))
+    if not width or not height or ra is None or dec is None:
+        return []
+    if kind == "single":
+        return [{"ra": ra % 360.0, "dec": dec, "width": width, "height": height,
+                 "rotation": 0.0, "row": 0, "column": 0}]
+    step = max(width, height) / DEPTH_CELLS
+    columns = max(1, math.ceil(width / step - 1e-9))
+    rows = max(1, math.ceil(height / step - 1e-9))
+    cell_w, cell_h = width / columns, height / rows
+    cells = []
+    for row, y in enumerate(_offsets(rows, height, cell_h)):
+        for column, x in enumerate(_offsets(columns, width, cell_w)):
+            cell_ra, cell_dec = _along_axes(ra, dec, x, y, 0.0)
+            cells.append({"ra": cell_ra, "dec": cell_dec, "width": cell_w, "height": cell_h,
+                          "rotation": 0.0, "row": row, "column": column})
+    return cells
+
+
+def progress(goals: dict[str, float], seconds: dict[str, list[float]]) -> dict[str, dict[str, float]]:
+    """Per filter, how far a region has got against its goal.
+
+    `seconds` is each filter's depth on each cell of the depth map. Every cell's
+    depth counts at most its goal. `atGoal` is the share of cells at the goal,
+    `average` the mean depth against the goal, `thinnest` the least-covered cell.
+    """
+    out: dict[str, dict[str, float]] = {}
+    for letter, hours in goals.items():
+        goal = float(hours) * 3600.0
+        column = seconds.get(letter) or []
+        if goal <= 0 or not column:
+            continue
+        fractions = [min(1.0, value / goal) for value in column]
+        out[letter] = {
+            "goalHours": round(float(hours), 2),
+            "atGoal": round(sum(1 for f in fractions if f >= AT_GOAL) / len(fractions), 3),
+            "average": round(sum(fractions) / len(fractions), 3),
+            "thinnest": round(min(fractions), 3),
+        }
+    return out
+
+
+#: A fixed camera turned by more than this has its cells cut again at once, even
+#: mid-night: the old cells no longer fit what it sees. A half-turn is the same
+#: rectangle on the sky, so it counts as none.
+RECUT_DEGREES = 2.0
+#: A smaller change, past a plate solve's wobble, waits for the night to turn.
+SAME_CELL_DEGREES = 0.2
+
+
+def camera_turned(was: float | None, now: float | None, limit: float = RECUT_DEGREES) -> bool:
+    """Whether a fixed camera has turned by more than `limit` since its cells were cut."""
+    if (was is None) != (now is None):
+        return True
+    if was is None or now is None:
+        return False
+    return abs(((was - now + 90.0) % 180.0) - 90.0) > limit
+
+
+# ---------------------------------------------------------------------------
 # Can this rig help?
 # ---------------------------------------------------------------------------
 

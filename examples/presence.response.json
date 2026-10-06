@@ -2,21 +2,22 @@
   "telescopes": [
     {
       "id": "000000000001",
-      "name": "Vega 530",
+      "name": "Vega 530 narrowband",
+      "enrolledAs": "Vega 530",
       "owner": "Vega Observatory",
+      "ownerName": "Vega Observatory",
+      "avatar": "",
       "ra": 0.7123,
       "dec": 41.27,
       "state": "imaging",
       "target": "M31 halo in narrowband",
       "project": "000000000002",
       "ageSeconds": 0,
-      "online": true,
-      "ownerName": "Vega Observatory",
-      "avatar": ""
+      "online": true
     }
   ],
   "online": 1,
   "people": 1,
   "onlineSeconds": 1500,
-  "serverTime": 1791171043.0
+  "serverTime": 1791171045.0
 }

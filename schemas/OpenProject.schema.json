@@ -88,6 +88,13 @@
       "items": {
         "type": "string"
       }
+    },
+    "progress": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "$ref": "FilterProgress.schema.json"
+      },
+      "description": "Per filter, how far the region has got."
     }
   },
   "description": "An open project, as a telescope browsing for one sees it."

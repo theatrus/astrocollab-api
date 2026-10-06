@@ -4,9 +4,8 @@
       "id": "000000000001",
       "name": "Vega 530",
       "owner": "Vega Observatory",
-      "owner_id": "000000000000000042",
       "created": 1791171016.0,
-      "seen": 1791171044.0,
+      "seen": 1791171046.0,
       "profile": {
         "name": "Vega 530",
         "focalLength": 530.0,
@@ -39,12 +38,14 @@
           1.6974441962264148
         ]
       },
+      "owner_id": "000000000000000042",
       "presence": {
         "ra": 0.7123,
         "dec": 41.27,
         "state": "imaging",
         "target": "M31 halo in narrowband",
-        "project": "000000000002"
+        "project": "000000000002",
+        "telescope": "Vega 530 narrowband"
       }
     }
   ]

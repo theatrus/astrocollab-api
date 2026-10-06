@@ -26,7 +26,7 @@ PERSON_ROUTES = {"authMe", "authLogout", "enrolTelescope", "listTelescopes"}
 OP_ORDER = [
     "health", "authStatus", "authLogin", "authPoll", "authMe", "authLogout",
     "enrolTelescope", "listTelescopes", "pairTelescope",
-    "hello", "openProjects", "joinProject", "tonight", "setTaskState", "report", "presence",
+    "hello", "openProjects", "projectDepth", "joinProject", "tonight", "setTaskState", "report", "presence",
 ]
 
 

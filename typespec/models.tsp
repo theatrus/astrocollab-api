@@ -119,12 +119,21 @@ model Presence {
 
   /** The project being shot, if any. */
   project?: string;
+
+  /** What to call the telescope on the group's chart, such as its equipment profile's name. */
+  telescope?: string;
 }
 
 /** One telescope as the group sees it. */
 model TelescopePresence {
   id: Id;
+
+  /** What the telescope says to call it, or the name it was enrolled under. */
   name: string;
+
+  /** The name it was enrolled under. */
+  enrolledAs?: string;
+
   owner: string;
 
   /** Hours. */
@@ -238,6 +247,21 @@ model Compatibility {
   summary: string;
 }
 
+/** How far one filter has got across the whole region, everybody's accepted data together. */
+model FilterProgress {
+  /** Depth wanted at every point, hours. */
+  goalHours: float64;
+
+  /** Share of the region at the goal depth (within a tenth of it), 0–1. */
+  atGoal: float64;
+
+  /** The region's depth against the goal, each point capped at the goal, 0–1. */
+  average: float64;
+
+  /** The least-covered point's depth against the goal, 0–1. */
+  thinnest: float64;
+}
+
 /** An open project, as a telescope browsing for one sees it. */
 model OpenProject {
   id: Id;
@@ -271,6 +295,41 @@ model OpenProject {
   participants: int32;
   participantsOnline: int32;
   participantNames: string[];
+
+  /** Per filter, how far the region has got. */
+  progress?: Record<FilterProgress>;
+}
+
+/** One cell of a depth map's fine grid. */
+model DepthCell {
+  ra: float64;
+  `dec`: float64;
+  width: float64;
+  height: float64;
+  row: int32;
+  column: int32;
+}
+
+/**
+ * A project's depth map: the region cut into a fine north-up grid, with everybody's accepted
+ * seconds on each cell, per filter. Each accepted record credits the cells its footprint
+ * covers, in proportion to how much of each it covers.
+ */
+model DepthMap {
+  project: Id;
+  name: string;
+  region: Region;
+  columns: int32;
+  rows: int32;
+  cells: DepthCell[];
+
+  /** Per filter, seconds on each cell, in the order of `cells`. */
+  seconds: Record<float64[]>;
+
+  /** Hours wanted per filter at every point. */
+  goals: Record<float64>;
+
+  progress: Record<FilterProgress>;
 }
 
 // ---------------------------------------------------------------------------

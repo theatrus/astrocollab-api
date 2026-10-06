@@ -154,7 +154,8 @@ The rig profile gives:
 - **Time:** hours per night it gives, and its local window, such as 21:00 to
   03:00.
 
-A hello MAY carry **presence**: where the telescope points and what it is doing.
+A hello MAY carry **presence**: where the telescope points, what it is doing, and
+what to call it on the group's chart, such as its equipment profile's name.
 `GET /api/v1/presence` shows every telescope seen in the last day, with what it
 chose to share, so the group can see who is on the sky.
 
@@ -167,7 +168,11 @@ A project is a **region** of sky, of one of two kinds:
 - **`mosaic`:** an area to cover. Each telescope tiles the whole region with its
   own camera, so telescopes with different fields need not agree on a grid. Each
   cell MUST fit the rig's field at the angle it shoots, and the cells SHOULD
-  cover the region; the exact layout is the server's choice.
+  cover the region; the exact layout is the server's choice. A fixed camera's
+  cells follow its reported angle. A camera turned by more than 2° (a half-turn
+  counts as none) gets its cells cut again at once, because the old ones no
+  longer fit what it sees. Smaller changes past a plate solve's wobble, a fifth
+  of a degree, wait for the next night.
 - **`single`:** one object. Every telescope frames it whole, at whatever field it
   has; nobody tiles it.
 
@@ -182,7 +187,13 @@ a visit to one panel is worth.
 `GET /api/v1/agent/projects` lists every open project with whether this
 telescope can help, checked against the profile it last sent, rule by rule.
 Programs SHOULD show the operator why a rig cannot help before a night is spent
-on it. Each listing also shows the accepted hours so far and who is taking part.
+on it. Each listing also shows the accepted hours so far, who is taking part,
+and progress per filter: the share of the region at the goal depth, the average
+depth against the goal, and the thinnest point.
+
+`GET /api/v1/agent/projects/{id}/depth` gives the depth map behind those figures:
+the region cut into a fine grid, with everybody's accepted seconds on each cell,
+per filter. A project is done in a filter when the whole region is at its goal.
 
 `POST /api/v1/agent/projects/{id}/join` takes a share. A rig that has not said
 hello with its focal length, sensor size and pixel size gets `400`: the server
@@ -216,9 +227,11 @@ Rules for dealing a night:
 - A list MUST hold for the whole night it was dealt for. Other rigs' frames
   arriving at 2 a.m. must not move panels under a rig that is shooting them. The
   list is dealt afresh the first time the rig asks in the next night. A rig that
-  never names its night gets a list held for 20 hours. A server MAY deal a list
-  again within the night once, when the rig first reports its Moon, or when the
-  hours it gives that night change by more than 15%.
+  never names its night gets a list held for 20 hours. Nothing moves a list
+  within its night: changed hours, a newly reported Moon, newcomers, frames and
+  a changed tiling rule are all considered when the night turns. So a program
+  can read the deal once at dusk and trust it. The one exception is a fixed
+  camera turned by more than 2°, whose cells must be cut again (section 5).
 - A visit to a panel MUST NOT be shorter than the project's `minFramesPerVisit`
   in any filter, because a rig stacks its own frames first.
 - A rig is dealt only filters it carries.

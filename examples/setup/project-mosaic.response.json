@@ -3,7 +3,6 @@
     "id": "000000000002",
     "name": "M31 halo in narrowband",
     "coordinator": "coordinator",
-    "owner_id": "",
     "created": 1791171018.0,
     "status": "open",
     "payload": {
@@ -41,6 +40,7 @@
         "O": 10.0
       },
       "notes": "Faint H-alpha and OIII around M31. Calibrated subs only."
-    }
+    },
+    "owner_id": ""
   }
 }

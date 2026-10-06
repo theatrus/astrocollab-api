@@ -516,6 +516,145 @@ class Reports(Harness):
         self.assertEqual(status, 403)
 
 
+class DepthMap(Harness):
+    def depth(self, token, project=M31):
+        project_id = self.httpd.sample_project_ids.get(project, project)
+        status, grid = self.call("GET", f"/api/v1/agent/projects/{project_id}/depth", token)
+        self.assertEqual(status, 200, grid)
+        return grid
+
+    def test_the_map_cuts_the_region_into_a_fine_north_up_grid(self):
+        token = self.telescope()
+        grid = self.depth(token)
+        region = grid["region"]
+        self.assertEqual(max(grid["columns"], grid["rows"]), rules.DEPTH_CELLS)
+        self.assertEqual(len(grid["cells"]), grid["columns"] * grid["rows"])
+        # The cells tile the region exactly: their sizes add up to its sides.
+        self.assertAlmostEqual(sum(c["width"] for c in grid["cells"] if c["row"] == 0), region["width"])
+        self.assertAlmostEqual(sum(c["height"] for c in grid["cells"] if c["column"] == 0), region["height"])
+        self.assertEqual(sorted(grid["seconds"]), sorted(grid["goals"]))
+        for letter, column in grid["seconds"].items():
+            self.assertEqual(len(column), len(grid["cells"]), letter)
+            self.assertEqual(set(column), {0.0})
+        self.assertEqual(grid["progress"]["H"], {"goalHours": 10.0, "atGoal": 0.0,
+                                                 "average": 0.0, "thinnest": 0.0})
+
+    def test_a_single_target_maps_as_one_cell(self):
+        token = self.telescope()
+        grid = self.depth(token, M51)
+        self.assertEqual((grid["columns"], grid["rows"], len(grid["cells"])), (1, 1, 1))
+
+    def test_an_unknown_project_is_404(self):
+        token = self.telescope()
+        status, _ = self.call("GET", "/api/v1/agent/projects/0123456789ab/depth", token)
+        self.assertEqual(status, 404)
+
+    def test_an_accepted_report_credits_the_cells_it_covers_in_proportion(self):
+        token = self.telescope()
+        share = self.join(token)[1]["task"]
+        share = self.tonight(token)["tasks"][0]
+        index = share["share"][0]
+        entry = self.record(share, index)
+        status, answer = self.call("POST", "/api/v1/agent/report", token, {"contributions": [entry]})
+        self.assertTrue(answer["recorded"][0]["accepted"], answer)
+        grid = self.depth(token)
+        letter = rules.filter_letter(entry["filterName"])
+        column = grid["seconds"][letter]
+        # Every cell credited lies under the footprint, and no cell gets more than
+        # the record's seconds; cells fully inside it get all of them.
+        self.assertGreater(max(column), 0.0)
+        self.assertLessEqual(max(column), entry["seconds"] + 0.1)
+        self.assertIn(entry["seconds"], [round(value, 1) for value in column])
+        footprint = entry["footprint"]
+        for cell, value in zip(grid["cells"], column):
+            if value:
+                fraction = rules.covered_fraction({**cell, "rotation": 0.0}, [footprint])
+                self.assertGreater(fraction, 0.0)
+                self.assertAlmostEqual(value, round(entry["seconds"] * fraction, 1), delta=0.1)
+        # Progress follows: some depth on average, nothing at the goal yet.
+        expected = rules.progress(grid["goals"], grid["seconds"])
+        self.assertEqual(grid["progress"], expected)
+        self.assertGreater(grid["progress"][letter]["average"], 0.0)
+        self.assertEqual(grid["progress"][letter]["thinnest"], 0.0)
+
+    def test_listings_carry_the_same_progress(self):
+        token = self.telescope()
+        share = self.join(token)[1]["task"]
+        share = self.tonight(token)["tasks"][0]
+        self.call("POST", "/api/v1/agent/report", token,
+                  {"contributions": [self.record(share, share["share"][0])]})
+        listed = {p["name"]: p for p in self.call("GET", "/api/v1/agent/projects", token)[1]["projects"]}
+        self.assertEqual(listed[M31]["progress"], self.depth(token)["progress"])
+
+    def test_progress_counts_a_cell_near_its_goal_as_there(self):
+        goals = {"H": 1.0}
+        seconds = {"H": [3600.0, 3240.0, 3000.0, 0.0]}
+        self.assertEqual(rules.progress(goals, seconds)["H"],
+                         {"goalHours": 1.0, "atGoal": 0.5, "average": round((1 + 0.9 + 3000 / 3600) / 4, 3),
+                          "thinnest": 0.0})
+        self.assertEqual(rules.progress({}, seconds), {})
+
+
+class Presence(Harness):
+    def test_a_rig_may_name_itself_for_the_chart(self):
+        token = self.telescope("Vega 530")
+        self.call("POST", "/api/v1/agent/hello", token,
+                  {"profile": PROFILE, "presence": {"state": "imaging", "telescope": "Vega narrowband"}})
+        row = self.call("GET", "/api/v1/presence", token)[1]["telescopes"][0]
+        self.assertEqual((row["name"], row["enrolledAs"]), ("Vega narrowband", "Vega 530"))
+        self.join(token)
+        listed = {p["name"]: p for p in self.call("GET", "/api/v1/agent/projects", token)[1]["projects"]}
+        self.assertEqual(listed[M31]["participantNames"], ["Vega narrowband"])
+
+    def test_without_a_name_the_enrolled_name_shows(self):
+        token = self.telescope("Vega 530")
+        row = self.call("GET", "/api/v1/presence", token)[1]["telescopes"][0]
+        self.assertEqual((row["name"], row["enrolledAs"]), ("Vega 530", "Vega 530"))
+
+
+class HeldNight(Harness):
+    def test_nothing_moves_a_list_within_its_night(self):
+        token = self.telescope()
+        self.join(token)
+        first = self.tonight(token)["tasks"][0]
+        # New hours, a newly reported bright Moon and another rig's report: all wait
+        # for the night to turn.
+        self.call("POST", "/api/v1/agent/hello", token,
+                  {"profile": {**PROFILE, "hoursPerNight": 2.0}})
+        other = self.telescope("Other rig")
+        self.join(other)
+        other_share = self.tonight(other)["tasks"][0]
+        self.call("POST", "/api/v1/agent/report", other,
+                  {"contributions": [self.record(other_share, other_share["share"][0])]})
+        again = self.tonight(token, moon=0.95, moon_up=0.9)["tasks"][0]
+        self.assertEqual((again["share"], again["visit"], again["version"]),
+                         (first["share"], first["visit"], first["version"]))
+        moved = self.tonight(token, night="2026-10-06", moon=0.95, moon_up=0.9)["tasks"][0]
+        self.assertEqual(moved["dealtHours"], 2.0)
+        self.assertIn(moved["visit"]["filter"], rules.MOON_TOLERANT)
+
+    def test_a_plate_solves_wobble_does_not_recut_cells(self):
+        token = self.telescope(profile={"rotation": 35.0})
+        self.join(token)
+        first = self.tonight(token)["tasks"][0]
+        self.call("POST", "/api/v1/agent/hello", token, {"profile": {**PROFILE, "rotation": 35.05}})
+        again = self.tonight(token)["tasks"][0]
+        self.assertEqual((again["cells"], again["version"]), (first["cells"], first["version"]))
+        # A half-turn is the same rectangle on the sky.
+        self.call("POST", "/api/v1/agent/hello", token, {"profile": {**PROFILE, "rotation": 215.0}})
+        self.assertEqual(self.tonight(token)["tasks"][0]["cells"], first["cells"])
+        # A one-degree turn waits for the night to turn.
+        self.call("POST", "/api/v1/agent/hello", token, {"profile": {**PROFILE, "rotation": 36.0}})
+        self.assertEqual(self.tonight(token)["tasks"][0]["cells"], first["cells"])
+        later = self.tonight(token, night="2026-10-06")["tasks"][0]
+        self.assertEqual({c["rotation"] for c in later["cells"]}, {36.0})
+        # A real turn cuts the cells again at once.
+        self.call("POST", "/api/v1/agent/hello", token, {"profile": {**PROFILE, "rotation": 80.0}})
+        turned = self.tonight(token)["tasks"][0]
+        self.assertNotEqual(turned["cells"], first["cells"])
+        self.assertEqual({c["rotation"] for c in turned["cells"]}, {80.0})
+
+
 class Client(Harness):
     def test_the_example_client_runs_a_night_by_pairing(self):
         lines = []

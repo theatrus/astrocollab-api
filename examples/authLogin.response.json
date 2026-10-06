@@ -1,5 +1,5 @@
 {
   "code": "EXAMPLE_ONLY_TOKEN_01_xxxxxxxx",
   "url": "https://collab.example/auth/discord/start?code=EXAMPLE_ONLY_TOKEN_01_xxxxxxxx",
-  "expiresIn": 600
+  "expiresIn": 600.0
 }

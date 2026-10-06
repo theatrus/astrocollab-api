@@ -23,6 +23,11 @@ API. Starfront's capture app and server are the first implementation.
 - **Tokens:** a person signs in with the device flow and enrols telescopes, or a
   telescope pairs with a code. Person and telescope tokens never stand in for each
   other.
+- **A night's list holds without exception** until the night turns, as Starfront
+  now does.
+- **Progress and the depth map:** project listings give progress per filter, and
+  `GET /api/v1/agent/projects/{id}/depth` gives everybody's depth on a fine grid
+  over the region. A presence may name the telescope for the group's chart.
 - **Joining** may carry the night and the Moon, as Starfront now sends, so a
   share's first list is tonight's.
 - **Rigs** describe their sub length per filter (what their darks are built for),

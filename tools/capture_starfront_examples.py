@@ -186,7 +186,8 @@ call("POST", "/api/v1/agent/hello", name="hello", operation="hello",
      request_schema="HelloRequest", response_schema="HelloResponse", token=rig, body={
          "protocol": collab.PROTOCOL, "profile": profile,
          "presence": {"ra": 0.7123, "dec": 41.27, "state": "imaging",
-                      "target": "M31 halo in narrowband", "project": mosaic_id}})
+                      "target": "M31 halo in narrowband", "project": mosaic_id,
+                      "telescope": "Vega 530 narrowband"}})
 
 call("GET", "/api/v1/agent/projects", name="openProjects", operation="openProjects",
      response_schema="OpenProjects", token=rig)
@@ -238,6 +239,9 @@ call("POST", "/api/v1/agent/report", name="report.rejected", operation=None,
      body={"contributions": [{**contribution(share[0], hfr_px=3.4, frames=11),
                               "night": "2026-10-06"}]})
 
+# After the first report, so the map shows depth where the two panels landed.
+call("GET", f"/api/v1/agent/projects/{mosaic_id}/depth", name="projectDepth",
+     operation="projectDepth", response_schema="DepthMap", token=rig)
 call("GET", "/api/v1/presence", name="presence", operation="presence",
      response_schema="PresenceResponse", token=rig)
 call("GET", "/api/v1/agents", name="listTelescopes", operation="listTelescopes",

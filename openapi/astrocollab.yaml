@@ -104,6 +104,7 @@ paths:
                     state: imaging
                     target: M31 halo in narrowband
                     project: '000000000002'
+                    telescope: Vega 530 narrowband
   /api/v1/agent/projects:
     get:
       operationId: openProjects
@@ -179,9 +180,6 @@ paths:
                           can shoot L — but no R; no G; no B'
                       joined: false
                       collected: {}
-                      participants: 0
-                      participantsOnline: 0
-                      participantNames: []
                       progress:
                         L:
                           goalHours: 20.0
@@ -203,6 +201,9 @@ paths:
                           atGoal: 0.0
                           average: 0.0
                           thinnest: 0.0
+                      participants: 0
+                      participantsOnline: 0
+                      participantNames: []
                     - id: '000000000002'
                       name: M31 halo in narrowband
                       coordinator: coordinator
@@ -256,9 +257,6 @@ paths:
                         summary: can contribute
                       joined: false
                       collected: {}
-                      participants: 0
-                      participantsOnline: 0
-                      participantNames: []
                       progress:
                         H:
                           goalHours: 10.0
@@ -270,9 +268,1496 @@ paths:
                           atGoal: 0.0
                           average: 0.0
                           thinnest: 0.0
+                      participants: 0
+                      participantsOnline: 0
+                      participantNames: []
                     protocol: 1
         '401':
           description: Missing, unknown or revoked token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '422':
+          description: The body does not match its type.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorBody'
+      tags:
+      - telescope
+  /api/v1/agent/projects/{project_id}/depth:
+    get:
+      operationId: projectDepth
+      summary: See a project's depth map
+      description: Everybody's accepted depth on a fine grid over the region, per filter, and the progress
+        it adds up to.
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Id'
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepthMap'
+              examples:
+                example:
+                  value:
+                    project: '000000000002'
+                    name: M31 halo in narrowband
+                    region:
+                      ra: 10.6847
+                      dec: 41.269
+                      width: 7.0
+                      height: 4.5
+                      rotation: 35.0
+                    columns: 16
+                    rows: 11
+                    cells:
+                    - ra: 6.4491057933185525
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 0
+                    - ra: 7.013851687542745
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 1
+                    - ra: 7.578597581766939
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 2
+                    - ra: 8.14334347599113
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 3
+                    - ra: 8.708089370215324
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 4
+                    - ra: 9.272835264439518
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 5
+                    - ra: 9.83758115866371
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 6
+                    - ra: 10.402327052887903
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 7
+                    - ra: 10.967072947112095
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 8
+                    - ra: 11.531818841336289
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 9
+                    - ra: 12.09656473556048
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 10
+                    - ra: 12.661310629784674
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 11
+                    - ra: 13.226056524008868
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 12
+                    - ra: 13.79080241823306
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 13
+                    - ra: 14.355548312457254
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 14
+                    - ra: 14.920294206681447
+                      dec: 39.22354545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 0
+                      column: 15
+                    - ra: 6.424166522727009
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 0
+                    - ra: 6.992237653030074
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 1
+                    - ra: 7.56030878333314
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 2
+                    - ra: 8.128379913636206
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 3
+                    - ra: 8.69645104393927
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 4
+                    - ra: 9.264522174242336
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 5
+                    - ra: 9.832593304545401
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 6
+                    - ra: 10.400664434848467
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 7
+                    - ra: 10.968735565151531
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 8
+                    - ra: 11.536806695454597
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 9
+                    - ra: 12.104877825757663
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 10
+                    - ra: 12.67294895606073
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 11
+                    - ra: 13.241020086363793
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 12
+                    - ra: 13.80909121666686
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 13
+                    - ra: 14.377162346969925
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 14
+                    - ra: 14.94523347727299
+                      dec: 39.632636363636365
+                      width: 0.4375
+                      height: 0.4375
+                      row: 1
+                      column: 15
+                    - ra: 6.398712036600621
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 0
+                    - ra: 6.970177098387204
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 1
+                    - ra: 7.541642160173788
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 2
+                    - ra: 8.113107221960373
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 3
+                    - ra: 8.684572283746956
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 4
+                    - ra: 9.25603734553354
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 5
+                    - ra: 9.827502407320123
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 6
+                    - ra: 10.398967469106708
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 7
+                    - ra: 10.97043253089329
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 8
+                    - ra: 11.541897592679875
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 9
+                    - ra: 12.113362654466458
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 10
+                    - ra: 12.684827716253043
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 11
+                    - ra: 13.256292778039626
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 12
+                    - ra: 13.82775783982621
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 13
+                    - ra: 14.399222901612795
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 14
+                    - ra: 14.970687963399378
+                      dec: 40.04172727272727
+                      width: 0.4375
+                      height: 0.4375
+                      row: 2
+                      column: 15
+                    - ra: 6.372730425850051
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 0
+                    - ra: 6.947659702403378
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 1
+                    - ra: 7.522588978956704
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 2
+                    - ra: 8.09751825551003
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 3
+                    - ra: 8.672447532063357
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 4
+                    - ra: 9.247376808616684
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 5
+                    - ra: 9.822306085170009
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 6
+                    - ra: 10.397235361723336
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 7
+                    - ra: 10.972164638276663
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 8
+                    - ra: 11.54709391482999
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 9
+                    - ra: 12.122023191383315
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 10
+                    - ra: 12.696952467936642
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 11
+                    - ra: 13.271881744489969
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 12
+                    - ra: 13.846811021043294
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 13
+                    - ra: 14.421740297596621
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 14
+                    - ra: 14.996669574149948
+                      dec: 40.45081818181818
+                      width: 0.4375
+                      height: 0.4375
+                      row: 3
+                      column: 15
+                    - ra: 6.346209371995297
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 0
+                    - ra: 6.924674789062591
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 1
+                    - ra: 7.503140206129885
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 2
+                    - ra: 8.081605623197177
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 3
+                    - ra: 8.660071040264471
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 4
+                    - ra: 9.238536457331765
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 5
+                    - ra: 9.81700187439906
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 6
+                    - ra: 10.395467291466353
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 7
+                    - ra: 10.973932708533646
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 8
+                    - ra: 11.55239812560094
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 9
+                    - ra: 12.130863542668234
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 10
+                    - ra: 12.709328959735528
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 11
+                    - ra: 13.287794376802822
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 12
+                    - ra: 13.866259793870114
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 13
+                    - ra: 14.444725210937408
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 14
+                    - ra: 15.023190628004702
+                      dec: 40.85990909090909
+                      width: 0.4375
+                      height: 0.4375
+                      row: 4
+                      column: 15
+                    - ra: 6.319136130169242
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 0
+                    - ra: 6.901211312813343
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 1
+                    - ra: 7.483286495457444
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 2
+                    - ra: 8.065361678101546
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 3
+                    - ra: 8.647436860745646
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 4
+                    - ra: 9.229512043389747
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 5
+                    - ra: 9.811587226033847
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 6
+                    - ra: 10.39366240867795
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 7
+                    - ra: 10.97573759132205
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 8
+                    - ra: 11.557812773966152
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 9
+                    - ra: 12.139887956610252
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 10
+                    - ra: 12.721963139254353
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 11
+                    - ra: 13.304038321898453
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 12
+                    - ra: 13.886113504542555
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 13
+                    - ra: 14.468188687186656
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 14
+                    - ra: 15.050263869830758
+                      dec: 41.269
+                      width: 0.4375
+                      height: 0.4375
+                      row: 5
+                      column: 15
+                    - ra: 6.291497511254137
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 0
+                    - ra: 6.87725784308692
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 1
+                    - ra: 7.463018174919701
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 2
+                    - ra: 8.048778506752482
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 3
+                    - ra: 8.634538838585264
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 4
+                    - ra: 9.220299170418045
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 5
+                    - ra: 9.806059502250827
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 6
+                    - ra: 10.39181983408361
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 7
+                    - ra: 10.97758016591639
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 8
+                    - ra: 11.563340497749172
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 9
+                    - ra: 12.149100829581954
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 10
+                    - ra: 12.734861161414734
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 11
+                    - ra: 13.320621493247517
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 12
+                    - ra: 13.906381825080299
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 13
+                    - ra: 14.49214215691308
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 14
+                    - ra: 15.077902488745861
+                      dec: 41.678090909090905
+                      width: 0.4375
+                      height: 0.4375
+                      row: 6
+                      column: 15
+                    - ra: 6.263279863099264
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 0
+                    - ra: 6.852802548019362
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 1
+                    - ra: 7.44232523293946
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 2
+                    - ra: 8.031847917859558
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 3
+                    - ra: 8.621370602779656
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 4
+                    - ra: 9.210893287699754
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 5
+                    - ra: 9.800415972619852
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 6
+                    - ra: 10.38993865753995
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 7
+                    - ra: 10.979461342460048
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 8
+                    - ra: 11.568984027380147
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 9
+                    - ra: 12.158506712300245
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 10
+                    - ra: 12.748029397220343
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 11
+                    - ra: 13.33755208214044
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 12
+                    - ra: 13.927074767060539
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 13
+                    - ra: 14.516597451980637
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 14
+                    - ra: 15.106120136900735
+                      dec: 42.08718181818182
+                      width: 0.4375
+                      height: 0.4375
+                      row: 7
+                      column: 15
+                    - ra: 6.2344690507644644
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 0
+                    - ra: 6.827833177329202
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 1
+                    - ra: 7.4211973038939405
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 2
+                    - ra: 8.014561430458679
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 3
+                    - ra: 8.607925557023417
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 4
+                    - ra: 9.201289683588154
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 5
+                    - ra: 9.794653810152893
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 6
+                    - ra: 10.388017936717631
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 7
+                    - ra: 10.981382063282368
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 8
+                    - ra: 11.574746189847106
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 9
+                    - ra: 12.168110316411845
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 10
+                    - ra: 12.761474442976581
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 11
+                    - ra: 13.35483856954132
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 12
+                    - ra: 13.948202696106058
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 13
+                    - ra: 14.541566822670797
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 14
+                    - ra: 15.134930949235535
+                      dec: 42.496272727272725
+                      width: 0.4375
+                      height: 0.4375
+                      row: 8
+                      column: 15
+                    - ra: 6.205050435730385
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 0
+                    - ra: 6.802337044299668
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 1
+                    - ra: 7.399623652868949
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 2
+                    - ra: 7.996910261438231
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 3
+                    - ra: 8.594196870007513
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 4
+                    - ra: 9.191483478576794
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 5
+                    - ra: 9.788770087146077
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 6
+                    - ra: 10.386056695715359
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 7
+                    - ra: 10.98334330428464
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 8
+                    - ra: 11.580629912853922
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 9
+                    - ra: 12.177916521423205
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 10
+                    - ra: 12.775203129992486
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 11
+                    - ra: 13.372489738561768
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 12
+                    - ra: 13.969776347131049
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 13
+                    - ra: 14.567062955700331
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 14
+                    - ra: 15.164349564269614
+                      dec: 42.90536363636363
+                      width: 0.4375
+                      height: 0.4375
+                      row: 9
+                      column: 15
+                    - ra: 6.175008854012136
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 0
+                    - ra: 6.776301006810517
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 1
+                    - ra: 7.3775931596088995
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 2
+                    - ra: 7.9788853124072805
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 3
+                    - ra: 8.580177465205663
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 4
+                    - ra: 9.181469618004044
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 5
+                    - ra: 9.782761770802427
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 6
+                    - ra: 10.384053923600808
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 7
+                    - ra: 10.98534607639919
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 8
+                    - ra: 11.586638229197572
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 9
+                    - ra: 12.187930381995955
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 10
+                    - ra: 12.789222534794336
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 11
+                    - ra: 13.390514687592718
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 12
+                    - ra: 13.9918068403911
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 13
+                    - ra: 14.593098993189482
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 14
+                    - ra: 15.194391145987863
+                      dec: 43.314454545454545
+                      width: 0.4375
+                      height: 0.4375
+                      row: 10
+                      column: 15
+                    seconds:
+                      H:
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      O:
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 4786.8
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3010.3
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 4838.9
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 2986.3
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 4891.2
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 2961.7
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 4357.9
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 3300.0
+                      - 2588.5
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                    goals:
+                      H: 10.0
+                      O: 10.0
+                    progress:
+                      H:
+                        goalHours: 10.0
+                        atGoal: 0.0
+                        average: 0.0
+                        thinnest: 0.0
+                      O:
+                        goalHours: 10.0
+                        atGoal: 0.0
+                        average: 0.024
+                        thinnest: 0.0
+        '401':
+          description: Missing, unknown or revoked token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '404':
+          description: No such thing, or not this caller's.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '409':
+          description: Conflicts with how things stand, such as a rig that cannot meet a project.
           content:
             application/json:
               schema:
@@ -339,69 +1824,69 @@ paths:
                       note: joined by Vega 530
                       seconds: 72000.0
                       cells:
-                      - ra: 7.648994769812747
+                      - row: 0
+                        column: 0
+                        ra: 7.648994769812747
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 0
-                      - ra: 10.6847
+                      - row: 0
+                        column: 1
+                        ra: 10.6847
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 1
-                      - ra: 13.720405230187254
+                      - row: 0
+                        column: 2
+                        ra: 13.720405230187254
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 2
-                      - ra: 7.580299025898128
-                        dec: 41.269
-                        width: 2.53966267672956
-                        height: 1.6974441962264148
-                        rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 0
-                      - ra: 10.6847
+                        ra: 7.580299025898128
                         dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 1
-                      - ra: 13.789100974101872
+                        ra: 10.6847
                         dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 2
-                      - ra: 7.506193403991872
-                        dec: 42.769
+                        ra: 13.789100974101872
+                        dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 0
-                      - ra: 10.6847
+                        ra: 7.506193403991872
                         dec: 42.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 1
-                      - ra: 13.863206596008128
+                        ra: 10.6847
                         dec: 42.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 2
+                        ra: 13.863206596008128
+                        dec: 42.769
+                        width: 2.53966267672956
+                        height: 1.6974441962264148
+                        rotation: 35.0
                       share:
                       - 0
                       - 1
@@ -410,16 +1895,16 @@ paths:
                       - 4
                       - 5
                       kind: mosaic
+                      tiledRotation: null
+                      assignedAt: 1791171030.0
+                      assignedNight: '2026-10-05'
+                      dealtHours: 6.0
                       visit:
                         seconds: 3300.0
                         frames:
                           O: 11
                         filter: O
                         moon: 0.036
-                      assignedNight: '2026-10-05'
-                      assignedAt: 1791171030.0
-                      dealtHours: 6.0
-                      tiledRotation: null
                     requirements:
                       minFocalLength: null
                       maxFocalLength: null
@@ -676,69 +2161,69 @@ paths:
                       note: joined by Vega 530
                       seconds: 72000.0
                       cells:
-                      - ra: 7.648994769812747
+                      - row: 0
+                        column: 0
+                        ra: 7.648994769812747
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 0
-                      - ra: 10.6847
+                      - row: 0
+                        column: 1
+                        ra: 10.6847
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 1
-                      - ra: 13.720405230187254
+                      - row: 0
+                        column: 2
+                        ra: 13.720405230187254
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 2
-                      - ra: 7.580299025898128
-                        dec: 41.269
-                        width: 2.53966267672956
-                        height: 1.6974441962264148
-                        rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 0
-                      - ra: 10.6847
+                        ra: 7.580299025898128
                         dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 1
-                      - ra: 13.789100974101872
+                        ra: 10.6847
                         dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 2
-                      - ra: 7.506193403991872
-                        dec: 42.769
+                        ra: 13.789100974101872
+                        dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 0
-                      - ra: 10.6847
+                        ra: 7.506193403991872
                         dec: 42.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 1
-                      - ra: 13.863206596008128
+                        ra: 10.6847
                         dec: 42.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 2
+                        ra: 13.863206596008128
+                        dec: 42.769
+                        width: 2.53966267672956
+                        height: 1.6974441962264148
+                        rotation: 35.0
                       share:
                       - 0
                       - 1
@@ -747,16 +2232,16 @@ paths:
                       - 4
                       - 5
                       kind: mosaic
+                      tiledRotation: null
+                      assignedAt: 1791171030.0
+                      assignedNight: '2026-10-05'
+                      dealtHours: 6.0
                       visit:
                         seconds: 3300.0
                         frames:
                           O: 11
                         filter: O
                         moon: 0.036
-                      assignedNight: '2026-10-05'
-                      assignedAt: 1791171030.0
-                      dealtHours: 6.0
-                      tiledRotation: null
                     tasks:
                     - id: '000000000004'
                       project: '000000000002'
@@ -781,69 +2266,69 @@ paths:
                       note: joined by Vega 530
                       seconds: 72000.0
                       cells:
-                      - ra: 7.648994769812747
+                      - row: 0
+                        column: 0
+                        ra: 7.648994769812747
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 0
-                      - ra: 10.6847
+                      - row: 0
+                        column: 1
+                        ra: 10.6847
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 1
-                      - ra: 13.720405230187254
+                      - row: 0
+                        column: 2
+                        ra: 13.720405230187254
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 2
-                      - ra: 7.580299025898128
-                        dec: 41.269
-                        width: 2.53966267672956
-                        height: 1.6974441962264148
-                        rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 0
-                      - ra: 10.6847
+                        ra: 7.580299025898128
                         dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 1
-                      - ra: 13.789100974101872
+                        ra: 10.6847
                         dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 2
-                      - ra: 7.506193403991872
-                        dec: 42.769
+                        ra: 13.789100974101872
+                        dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 0
-                      - ra: 10.6847
+                        ra: 7.506193403991872
                         dec: 42.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 1
-                      - ra: 13.863206596008128
+                        ra: 10.6847
                         dec: 42.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 2
+                        ra: 13.863206596008128
+                        dec: 42.769
+                        width: 2.53966267672956
+                        height: 1.6974441962264148
+                        rotation: 35.0
                       share:
                       - 0
                       - 1
@@ -852,16 +2337,16 @@ paths:
                       - 4
                       - 5
                       kind: mosaic
+                      tiledRotation: null
+                      assignedAt: 1791171030.0
+                      assignedNight: '2026-10-05'
+                      dealtHours: 6.0
                       visit:
                         seconds: 3300.0
                         frames:
                           O: 11
                         filter: O
                         moon: 0.036
-                      assignedNight: '2026-10-05'
-                      assignedAt: 1791171030.0
-                      dealtHours: 6.0
-                      tiledRotation: null
                     requirementsByProject:
                       '000000000002':
                         minFocalLength: null
@@ -966,69 +2451,69 @@ paths:
                       note: joined by Vega 530
                       seconds: 72000.0
                       cells:
-                      - ra: 7.648994769812747
+                      - row: 0
+                        column: 0
+                        ra: 7.648994769812747
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 0
-                      - ra: 10.6847
+                      - row: 0
+                        column: 1
+                        ra: 10.6847
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 1
-                      - ra: 13.720405230187254
+                      - row: 0
+                        column: 2
+                        ra: 13.720405230187254
                         dec: 39.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 0
-                        column: 2
-                      - ra: 7.580299025898128
-                        dec: 41.269
-                        width: 2.53966267672956
-                        height: 1.6974441962264148
-                        rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 0
-                      - ra: 10.6847
+                        ra: 7.580299025898128
                         dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 1
-                      - ra: 13.789100974101872
+                        ra: 10.6847
                         dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 1
+                      - row: 1
                         column: 2
-                      - ra: 7.506193403991872
-                        dec: 42.769
+                        ra: 13.789100974101872
+                        dec: 41.269
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 0
-                      - ra: 10.6847
+                        ra: 7.506193403991872
                         dec: 42.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 1
-                      - ra: 13.863206596008128
+                        ra: 10.6847
                         dec: 42.769
                         width: 2.53966267672956
                         height: 1.6974441962264148
                         rotation: 35.0
-                        row: 2
+                      - row: 2
                         column: 2
+                        ra: 13.863206596008128
+                        dec: 42.769
+                        width: 2.53966267672956
+                        height: 1.6974441962264148
+                        rotation: 35.0
                       share:
                       - 0
                       - 1
@@ -1037,16 +2522,16 @@ paths:
                       - 4
                       - 5
                       kind: mosaic
+                      tiledRotation: null
+                      assignedAt: 1791171030.0
+                      assignedNight: '2026-10-05'
+                      dealtHours: 6.0
                       visit:
                         seconds: 3300.0
                         frames:
                           O: 11
                         filter: O
                         moon: 0.036
-                      assignedNight: '2026-10-05'
-                      assignedAt: 1791171030.0
-                      dealtHours: 6.0
-                      tiledRotation: null
         '401':
           description: Missing, unknown or revoked token.
           content:
@@ -1097,10 +2582,10 @@ paths:
                       id: '000000000001'
                       name: Vega 530
                       owner: Vega Observatory
-                      owner_id: '000000000000000042'
                       created: 1791171016.0
                       seen: 0.0
                       profile: {}
+                      owner_id: '000000000000000042'
                       presence: {}
                     token: EXAMPLE_ONLY_TOKEN_03_xxxxxxxx
         '401':
@@ -1152,9 +2637,8 @@ paths:
                     - id: '000000000001'
                       name: Vega 530
                       owner: Vega Observatory
-                      owner_id: '000000000000000042'
                       created: 1791171016.0
-                      seen: 1791171044.0
+                      seen: 1791171046.0
                       profile:
                         name: Vega 530
                         focalLength: 530.0
@@ -1183,12 +2667,14 @@ paths:
                         field:
                         - 2.53966267672956
                         - 1.6974441962264148
+                      owner_id: '000000000000000042'
                       presence:
                         ra: 0.7123
                         dec: 41.27
                         state: imaging
                         target: M31 halo in narrowband
                         project: '000000000002'
+                        telescope: Vega 530 narrowband
         '401':
           description: Missing, unknown or revoked token.
           content:
@@ -1252,7 +2738,7 @@ paths:
                   value:
                     code: EXAMPLE_ONLY_TOKEN_01_xxxxxxxx
                     url: https://collab.example/auth/discord/start?code=EXAMPLE_ONLY_TOKEN_01_xxxxxxxx
-                    expiresIn: 600
+                    expiresIn: 600.0
         '503':
           description: Not available on this server, such as sign-in when it is not set up.
           content:
@@ -1378,12 +2864,10 @@ paths:
                     ok: true
                     protocol: 1
                     time: 1791171001.0
-                    version: 0.2.14
+                    version: 0.2.23
                     adminConfigured: true
                     discord: true
                     roleRequired: false
-                    features:
-                    - signin
       tags:
       - discovery
       security:
@@ -1476,8 +2960,11 @@ paths:
                   value:
                     telescopes:
                     - id: '000000000001'
-                      name: Vega 530
+                      name: Vega 530 narrowband
+                      enrolledAs: Vega 530
                       owner: Vega Observatory
+                      ownerName: Vega Observatory
+                      avatar: ''
                       ra: 0.7123
                       dec: 41.27
                       state: imaging
@@ -1485,12 +2972,10 @@ paths:
                       project: '000000000002'
                       ageSeconds: 0
                       online: true
-                      ownerName: Vega Observatory
-                      avatar: ''
                     online: 1
                     people: 1
                     onlineSeconds: 1500
-                    serverTime: 1791171043.0
+                    serverTime: 1791171045.0
         '401':
           description: Missing, unknown or revoked token.
           content:
@@ -1669,6 +3154,88 @@ components:
         The
 
         footprint is the solved one: where the telescope really pointed.'
+    DepthCell:
+      type: object
+      required:
+      - ra
+      - dec
+      - width
+      - height
+      - row
+      - column
+      properties:
+        ra:
+          type: number
+          format: double
+        dec:
+          type: number
+          format: double
+        width:
+          type: number
+          format: double
+        height:
+          type: number
+          format: double
+        row:
+          type: integer
+          format: int32
+        column:
+          type: integer
+          format: int32
+      description: One cell of a depth map's fine grid.
+    DepthMap:
+      type: object
+      required:
+      - project
+      - name
+      - region
+      - columns
+      - rows
+      - cells
+      - seconds
+      - goals
+      - progress
+      properties:
+        project:
+          $ref: '#/components/schemas/Id'
+        name:
+          type: string
+        region:
+          $ref: '#/components/schemas/Region'
+        columns:
+          type: integer
+          format: int32
+        rows:
+          type: integer
+          format: int32
+        cells:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepthCell'
+        seconds:
+          type: object
+          unevaluatedProperties:
+            type: array
+            items:
+              type: number
+              format: double
+          description: Per filter, seconds on each cell, in the order of `cells`.
+        goals:
+          type: object
+          unevaluatedProperties:
+            type: number
+            format: double
+          description: Hours wanted per filter at every point.
+        progress:
+          type: object
+          unevaluatedProperties:
+            $ref: '#/components/schemas/FilterProgress'
+      description: 'A project''s depth map: the region cut into a fine north-up grid, with everybody''s
+        accepted
+
+        seconds on each cell, per filter. Each accepted record credits the cells its footprint
+
+        covers, in proportion to how much of each it covers.'
     EnrolRequest:
       type: object
       required:
@@ -1691,6 +3258,31 @@ components:
         detail:
           type: string
       description: An error. `detail` says what went wrong, in words to show the operator.
+    FilterProgress:
+      type: object
+      required:
+      - goalHours
+      - atGoal
+      - average
+      - thinnest
+      properties:
+        goalHours:
+          type: number
+          format: double
+          description: Depth wanted at every point, hours.
+        atGoal:
+          type: number
+          format: double
+          description: Share of the region at the goal depth (within a tenth of it), 0–1.
+        average:
+          type: number
+          format: double
+          description: The region's depth against the goal, each point capped at the goal, 0–1.
+        thinnest:
+          type: number
+          format: double
+          description: The least-covered point's depth against the goal, 0–1.
+      description: How far one filter has got across the whole region, everybody's accepted data together.
     FilterTask:
       type: object
       required:
@@ -1953,6 +3545,11 @@ components:
           type: array
           items:
             type: string
+        progress:
+          type: object
+          unevaluatedProperties:
+            $ref: '#/components/schemas/FilterProgress'
+          description: Per filter, how far the region has got.
       description: An open project, as a telescope browsing for one sees it.
     OpenProjects:
       type: object
@@ -2008,6 +3605,10 @@ components:
         project:
           type: string
           description: The project being shot, if any.
+        telescope:
+          type: string
+          description: What to call the telescope on the group's chart, such as its equipment profile's
+            name.
       description: Where a telescope points and what it is doing, as much as it chooses to say.
     PresenceResponse:
       type: object
@@ -2554,6 +4155,10 @@ components:
           $ref: '#/components/schemas/Id'
         name:
           type: string
+          description: What the telescope says to call it, or the name it was enrolled under.
+        enrolledAs:
+          type: string
+          description: The name it was enrolled under.
         owner:
           type: string
         ra:

@@ -55,16 +55,16 @@ breaks the contract. The suite exits with status 1 if any check fails.
 | --- | --- |
 | Discovery | Health says ok and protocol 1. Sign-in status answers; starting sign-in gives a code that polls as pending, or 503 where sign-in is off. A server without `features` offers sign-in when its status says so. |
 | Tokens | Enrolling or pairing gives each telescope its own token. Where `features` lists pairing, a used code gets 401. A made-up or missing token gets 401. A person's token cannot fetch work, and a telescope's token cannot enrol or list telescopes. |
-| Browsing | Open projects are listed with kind and compatibility. |
+| Browsing | Open projects are listed with kind and compatibility, and with progress for each goal filter, each figure between 0 and 1. A project's depth map covers its region, with one figure per cell for each goal filter; an accepted report raises it; an unknown project gets 404. |
 | Hello | A bare rig cannot help; the same rig described properly can. A newer protocol gets 409. |
 | Joining | A share arrives accepted, tiled with the rig's own field, at the rig's own sub lengths. Joining twice returns the same share. A rig with no optics gets 400; one with none of the wanted filters gets 409 with a reason. A rig with only some of them joins, and is dealt only those, even on a night that would favour another. A single target is one frame, centred on it. A fixed camera's cells follow its angle. |
-| Tonight | Every share comes back. The list holds for the night, even after another rig reports. The next night moves the rig to panels it has not shot. Accepting a share keeps it accepted. |
+| Tonight | Every share comes back. The list holds for the night, even after another rig reports, the rig gives new hours, or the Moon changes. The next night moves the rig to panels it has not shot. Accepting a share keeps it accepted. |
 | Dealing | A mosaic night is one filter. Each visit has at least `minFramesPerVisit` frames. Two rigs on one mosaic get different panels. |
 | Moon | A bright Moon deals H or S; a dark night deals O, L, R, G or B. |
 | Reports | Verdicts come back in the order sent. A rig cannot report on another rig's share (403). |
 | Judging | A record past `maxHfr` is rejected with a reason. A missing star size is listed as unverified. |
 | Duplicates | Reporting the same night, filter and panel again is a duplicate, and the accepted hours rise by the larger figure only. |
-| Presence | A telescope that shared where it points shows as online, with what it shared. |
+| Presence | A telescope that shared where it points shows as online, with what it shared, under the name it gave there; `enrolledAs`, if sent, is the name it enrolled under. |
 | Errors | Unknown projects and shares get 404 with a sentence. A body that breaks its type gets 422 listing the fields. |
 
 ## Test a client
@@ -107,11 +107,9 @@ when a listed check starts passing, so the list stays current.
 - **Coordinator tools.** Starting projects, pushing shares and overruling verdicts
   are outside the protocol.
 - **The pull order in full.** It checks that two rigs avoid each other and that a
-  rig moves on after a night, not the "thinnest field" order or the depth map.
+  rig moves on after a night, not the "thinnest field" order. It checks that the
+  depth map covers the region and rises, not that each cell's figure is right.
 - **Night length.** It does not check how many visits fit a night.
 - **Sign-in in a browser.** It starts sign-in and polls once; it cannot finish it.
-- **Re-dealing within a night.** A server may re-deal a held list once when Moon
-  data first arrives or the rig's hours change by more than 15%. The suite sends
-  the Moon on every call, so it does not test that exception.
 - **Revoking telescopes and hashed tokens.** The protocol only recommends them.
 - **Files.** The optional `files` extension has no routes yet.

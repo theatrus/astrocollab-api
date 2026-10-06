@@ -121,7 +121,16 @@ hours collected so far, and whether your rig can help, rule by rule:
 ```
 
 Show this to the operator before they spend a night on a project they cannot
-help.
+help. Each listing also gives `progress` per filter: how much of the field is at
+the goal depth, the average, and the thinnest point. For a picture of where the
+stack is deep and where it is thin, ask for the project's depth map:
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" $SERVER/api/v1/agent/projects/$PROJECT/depth
+```
+
+It cuts the region into a fine grid and gives everybody's accepted seconds on each
+cell, per filter. [Example](../examples/projectDepth.response.json).
 
 ## 4. Join it
 

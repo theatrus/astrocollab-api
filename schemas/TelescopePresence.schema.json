@@ -20,7 +20,12 @@
       "$ref": "Id.schema.json"
     },
     "name": {
-      "type": "string"
+      "type": "string",
+      "description": "What the telescope says to call it, or the name it was enrolled under."
+    },
+    "enrolledAs": {
+      "type": "string",
+      "description": "The name it was enrolled under."
     },
     "owner": {
       "type": "string"

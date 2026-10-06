@@ -115,6 +115,7 @@ class Suite:
         self.night1_rig2: dict[str, Any] | None = None
         self.night2: dict[str, Any] | None = None
         self.used_code: str | None = None             # a pairing code already spent
+        self.depth_before: dict[str, float] = {}      # mosaic depth per filter, before any report
         self.focal = 530.0
         self.hours = 2.0
 
@@ -151,6 +152,8 @@ class Suite:
             ("bad_token_is_refused", "Tokens", self.bad_token),
             ("person_and_telescope_tokens_kept_apart", "Tokens", self.tokens_apart),
             ("projects_are_listed_with_compatibility", "Browsing", self.browse),
+            ("projects_show_progress_per_goal", "Browsing", self.progress_per_goal),
+            ("the_depth_map_covers_the_region", "Browsing", self.depth_map),
             ("hello_stores_the_profile", "Hello", self.hello_stores_profile),
             ("newer_protocol_is_refused", "Hello", self.newer_protocol),
             ("join_tiles_the_region_with_the_rig_s_own_field", "Joining", self.join),
@@ -167,6 +170,7 @@ class Suite:
             ("two_rigs_take_different_panels", "Dealing", self.two_rigs),
             ("the_list_holds_for_the_night", "Tonight", self.list_holds),
             ("report_answers_in_order", "Reports", self.report_order),
+            ("accepted_reports_raise_the_depth_map", "Browsing", self.depth_rises),
             ("next_night_moves_on", "Tonight", self.next_night),
             ("dark_moon_deals_broadband_or_oiii", "Moon", self.dark_moon),
             ("a_broken_rule_is_rejected_with_a_reason", "Judging", self.judged_reject),
@@ -488,6 +492,97 @@ class Suite:
         self.choose_optics()
         return f"{len(self.projects)} open; using {self.focal:g} mm"
 
+    def progress_per_goal(self) -> str:
+        if not self.projects:
+            raise Skip("needs the listing")
+        shown = 0
+        for project in self.projects.values():
+            goals = {fold(name): float(hours) for name, hours in (project.get("goals") or {}).items()}
+            progress = project.get("progress")
+            if not goals:
+                continue
+            need(isinstance(progress, dict), f"project {project['id']} has goals but no progress")
+            by_letter = {fold(name): value for name, value in progress.items()}
+            missing = set(goals) - set(by_letter)
+            need(not missing, f"project {project['id']} shows no progress for {sorted(missing)}")
+            for letter, value in by_letter.items():
+                for key in ("atGoal", "average", "thinnest"):
+                    number = value.get(key)
+                    need(isinstance(number, (int, float)) and 0.0 <= number <= 1.0,
+                         f"project {project['id']} {letter} {key} is {number!r}, not between 0 and 1")
+                need(value.get("thinnest") <= value.get("average") + 1e-9,
+                     f"project {project['id']} {letter}: the thinnest point is above the average")
+                if letter in goals:
+                    need(abs(float(value.get("goalHours") or 0) - goals[letter]) < 0.01,
+                         f"project {project['id']} {letter} goalHours {value.get('goalHours')} "
+                         f"is not the goal {goals[letter]:g} h")
+            shown += 1
+        need(shown, "no listed project has goals to show progress for")
+        return f"{shown} projects, every goal filter between 0 and 1"
+
+    def depth(self, rig: Rig, project_id: str) -> dict[str, Any]:
+        return expect(self.client.get(f"{API}/agent/projects/{project_id}/depth", rig.token), 200, "depth map")
+
+    @staticmethod
+    def depth_totals(data: dict[str, Any]) -> dict[str, float]:
+        return {fold(name): sum(float(s) for s in seconds)
+                for name, seconds in (data.get("seconds") or {}).items()}
+
+    def depth_map(self) -> str:
+        rig = self.rig(0)
+        project = self.project(self.mosaic_id)
+        data = self.depth(rig, self.mosaic_id)
+        need(data.get("project") == self.mosaic_id, "the depth map names another project")
+        region, given = project["region"], data.get("region") or {}
+        for key in ("ra", "dec", "width", "height"):
+            need(abs(float(given.get(key, 0)) - float(region[key])) < 1e-3,
+                 f"the depth map's region {key} is {given.get(key)}, the project's {region[key]}")
+        cells = data.get("cells") or []
+        need(cells, "the depth map has no cells")
+        goals = {fold(name) for name in project.get("goals") or {}}
+        seconds = {fold(name): column for name, column in (data.get("seconds") or {}).items()}
+        for letter in goals:
+            column = seconds.get(letter)
+            need(column is not None, f"the depth map gives no seconds for {letter}")
+            need(len(column) == len(cells), f"{letter} has {len(column)} figures for {len(cells)} cells")
+            need(all(float(s) >= 0 for s in column), f"{letter} has negative seconds")
+        # The cells cover the region: centres inside it, and together at least its area,
+        # in the flat sky about the region's centre (the region is north-up).
+        ra0, dec0 = float(region["ra"]), float(region["dec"])
+        half_w, half_h = float(region["width"]) / 2, float(region["height"]) / 2
+        area = 0.0
+        low_x = low_y = math.inf
+        high_x = high_y = -math.inf
+        for cell in cells:
+            dx = ((float(cell["ra"]) - ra0 + 180.0) % 360.0 - 180.0) * math.cos(math.radians(float(cell["dec"])))
+            dy = float(cell["dec"]) - dec0
+            w, h = float(cell["width"]) / 2, float(cell["height"]) / 2
+            need(abs(dx) <= half_w + w * 1.05 and abs(dy) <= half_h + h * 1.05,
+                 f"cell at {cell['ra']:.3f}, {cell['dec']:.3f} lies outside the region")
+            area += 4 * w * h
+            low_x, high_x = min(low_x, dx - w), max(high_x, dx + w)
+            low_y, high_y = min(low_y, dy - h), max(high_y, dy + h)
+        need(area >= 0.95 * 4 * half_w * half_h,
+             f"the cells cover {area:.3f} deg², less than the region's {4 * half_w * half_h:.3f}")
+        slack = 0.03
+        need(low_x <= -half_w * (1 - slack) and high_x >= half_w * (1 - slack)
+             and low_y <= -half_h * (1 - slack) and high_y >= half_h * (1 - slack),
+             "the cells leave an edge of the region uncovered")
+        self.depth_before = self.depth_totals(data)
+        missing = self.client.get(f"{API}/agent/projects/{'f' * 12}/depth", rig.token)
+        need(missing.status == 404, f"the depth map of an unknown project gave {missing.status}")
+        return f"{len(cells)} cells cover the region; seconds for {sorted(goals)}"
+
+    def depth_rises(self) -> str:
+        rig = self.rig(0)
+        if self.night1 is None:
+            raise Skip("needs tonight's list")
+        letter = self.mosaic_letter()
+        before = self.depth_before.get(letter, 0.0)
+        after = self.depth_totals(self.depth(rig, self.mosaic_id)).get(letter, 0.0)
+        need(after > before, f"{letter} depth stayed at {before:g} cell-seconds after accepted reports")
+        return f"{letter} rose from {before:g} to {after:g} cell-seconds"
+
     def hello_stores_profile(self) -> str:
         rig = self.rig(0)
         bare = self.listing(rig)[self.mosaic_id]["compatibility"]
@@ -715,12 +810,20 @@ class Suite:
                                    self.min_frames_wanted(self.mosaic_id))
                        for i in self.night1_rig2.get("share") or []]
             self.report(self.rig(1), records)
-        again = self.share_of(self.tonight(rig, self.night("n1"), 0.9, 0.9), self.mosaic_id)
+        # Nothing moves a list within its night: not other rigs' frames, not new hours,
+        # not a different Moon (protocol section 6).
+        original = dict(rig.profile)
+        expect(self.hello(rig, {**original, "hoursPerNight": self.hours * 3}), 200, "hello with new hours")
+        try:
+            again = self.share_of(self.tonight(rig, self.night("n1"), 0.0, 0.0), self.mosaic_id)
+        finally:
+            self.hello(rig, original)
         need(again.get("share") == self.night1.get("share"),
              f"the list moved within the night: {self.night1.get('share')} became {again.get('share')}")
         need(again.get("version") == self.night1.get("version"),
              f"the version moved within the night: {self.night1.get('version')} became {again.get('version')}")
-        return "same panels and version" + (", after the other rig reported" if self.night1_rig2 else "")
+        return ("same panels and version after new hours and a different Moon"
+                + (", and the other rig's report" if self.night1_rig2 else ""))
 
     def report_order(self) -> str:
         rig = self.rig(0)
@@ -839,13 +942,23 @@ class Suite:
 
     def presence(self) -> str:
         rig = self.rig(0)
+        called = f"Conformance {self.nonce} scope"
+        region = self.project(self.mosaic_id)["region"]
+        expect(self.hello(rig, rig.profile, {
+            "ra": float(region["ra"]) / 15.0, "dec": float(region["dec"]), "state": "imaging",
+            "target": "conformance", "project": self.mosaic_id, "telescope": called}), 200, "hello")
         data = expect(self.client.get(f"{API}/presence", rig.token), 200, "presence")
         mine = [t for t in data.get("telescopes") or [] if t.get("id") == rig.id]
         need(mine, "the telescope is not in presence")
         need(mine[0].get("online") is True, "a telescope that just said hello is not online")
         need(mine[0].get("state") == "imaging", f"presence state is {mine[0].get('state')!r}, not what it shared")
+        need(mine[0].get("name") == called,
+             f"presence calls it {mine[0].get('name')!r}, not the name it gave, {called!r}")
+        if mine[0].get("enrolledAs") is not None:
+            need(mine[0]["enrolledAs"] == rig.name,
+                 f"enrolledAs is {mine[0]['enrolledAs']!r}, not the enrolled name {rig.name!r}")
         need(int(data.get("online") or 0) >= 1, "presence counts nobody online")
-        return "online, with what it shared"
+        return "online, under the name it gave" + (", enrolledAs kept" if "enrolledAs" in mine[0] else "")
 
     def not_found(self) -> str:
         rig = self.rig(0)

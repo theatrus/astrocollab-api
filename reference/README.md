@@ -86,10 +86,23 @@ The rules are in `rules.py`, each a plain function:
 - **Tiling.** A rig tiles a mosaic with its own frame, at the angle it shoots:
   its fixed angle, or the project's when a rotator can turn it. The grid is laid
   along the camera's axes, large enough to cover the north-up region, with 10%
-  overlap. A single target is one frame centred on the object.
+  overlap. A single target is one frame centred on the object. A fixed camera
+  keeps its cells when its angle moves by 0.2° or less, or by a half-turn,
+  which frames the same rectangle; a larger turn cuts them again.
 - **Depth** is integration time at a point. A cell's depth is the mean, over 25
   points spread across it, of the seconds of every accepted footprint covering
   each point.
+- **The depth map** cuts the region into a north-up grid, the longer side into
+  16 cells; a single target is one cell. Each accepted record adds its seconds
+  to each cell in proportion to how much of the cell its footprint covers. A
+  project whose region has no size gets `409`.
+- **Progress** per filter, in the depth map and the project listing: the share
+  of cells at 90% of the goal or more, the mean depth against the goal (each
+  cell counted up to the goal), and the thinnest cell. A project with no goals
+  has none.
+- **Presence** shows the name a rig gives in its presence, if any, and the name
+  it was enrolled under as `enrolledAs`. Project listings name rigs the same
+  way.
 - **A night's list** holds for the night the rig names, or 20 hours if it names
   none. A mosaic night is one filter: under a bright Moon (lit fraction times
   the fraction of the night it is up, 0.2 or more) H or S, otherwise the rest;
@@ -111,8 +124,8 @@ The rules are in `rules.py`, each a plain function:
 - **Reports** for the same telescope, share, night, filter and panel keep the
   larger figure.
 - **Pairing** answers `429` after five bad codes from one address in a minute.
-- **A night's list** never moves once dealt; the protocol lets a server re-deal
-  once when Moon data first arrives, and this one does not.
+- **A night's list** never moves once dealt. New hours, a Moon reported for the
+  first time and other rigs' reports all wait for the next night.
 
 Blank or unreadable numbers in a request are read as unknown, as the protocol
 recommends. Everything else is checked against `schemas/`, and a body that does
@@ -125,5 +138,6 @@ python -m unittest discover -s tests -p 'test_reference.py'
 ```
 
 The tests check every reply against the schema the contract gives for that
-route and status, and cover tokens, sign-in, pairing, hello, joining, dealing,
-judging, duplicate reports and the example program.
+route and status, and cover tokens, sign-in, pairing, hello, presence, joining,
+dealing, the held night, judging, duplicate reports, the depth map, progress
+and the example program.

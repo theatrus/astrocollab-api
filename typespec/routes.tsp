@@ -293,6 +293,12 @@ op presence(): Ok<PresenceResponse> | Errors;
 @get @route("/api/v1/agent/projects")
 op openProjects(): Ok<OpenProjects> | Errors;
 
+/** Everybody's accepted depth on a fine grid over the region, per filter, and the progress it adds up to. */
+@summary("See a project's depth map")
+@tag("telescope")
+@get @route("/api/v1/agent/projects/{project_id}/depth")
+op projectDepth(@path project_id: Id): Ok<DepthMap> | Errors | NotFound | Conflict;
+
 /**
  * Takes a share of a project, checked against the profile the rig last sent. The share is
  * the whole region tiled with this rig's own camera, at its own sub lengths. Joining twice

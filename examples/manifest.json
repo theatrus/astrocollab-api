@@ -136,6 +136,13 @@
     "schema": "ReportResponse"
   },
   {
+    "file": "projectDepth.response.json",
+    "operationId": "projectDepth",
+    "direction": "response",
+    "status": 200,
+    "schema": "DepthMap"
+  },
+  {
     "file": "presence.response.json",
     "operationId": "presence",
     "direction": "response",

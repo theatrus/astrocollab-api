@@ -8,8 +8,8 @@ maps each file to its type.
 
 ## Discover the server
 
-[Health](../examples/health.response.json) gives the protocol number, 1, the
-server's build, and `features`: this server offers sign-in. [Sign-in status](../examples/authStatus.response.json) says
+[Health](../examples/health.response.json) gives the protocol number, 1, and the
+server's build. [Sign-in status](../examples/authStatus.response.json) says
 sign-in is on; this server signs people in with Discord.
 
 ## Sign in and enrol
@@ -78,10 +78,20 @@ The next night's [report](../examples/report.rejected.request.json) has stars of
 4.98″, and is [rejected](../examples/report.rejected.response.json) against the
 project's 3.5″ limit, with the reason in words.
 
+## Depth and progress
+
+The [depth map](../examples/projectDepth.response.json) cuts the M31 region into
+a 16×11 grid and gives everybody's accepted seconds on each cell, per filter.
+After the first report, OIII depth sits where the two panels landed and H-alpha
+is still empty. The same data gives each project's progress in
+[the listing](../examples/openProjects.response.json): per filter, the share of
+the field at the goal, the average depth against it, and the thinnest point.
+
 ## Presence
 
-[Who is on the sky](../examples/presence.response.json): Vega 530 is online,
-pointing at M31.
+[Who is on the sky](../examples/presence.response.json): the rig is online,
+pointing at M31, under the name it gave in its presence, "Vega 530 narrowband";
+`enrolledAs` keeps the name it was enrolled under.
 
 ## Errors
 

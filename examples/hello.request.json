@@ -37,6 +37,7 @@
     "dec": 41.27,
     "state": "imaging",
     "target": "M31 halo in narrowband",
-    "project": "000000000002"
+    "project": "000000000002",
+    "telescope": "Vega 530 narrowband"
   }
 }

@@ -39,6 +39,10 @@
     "project": {
       "type": "string",
       "description": "The project being shot, if any."
+    },
+    "telescope": {
+      "type": "string",
+      "description": "What to call the telescope on the group's chart, such as its equipment profile's name."
     }
   },
   "description": "Where a telescope points and what it is doing, as much as it chooses to say."

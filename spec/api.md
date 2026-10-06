@@ -25,6 +25,7 @@ rules behind each route.
 | `POST` | [`/api/v1/pair`](#pairtelescope) | Pair a telescope with a code |
 | `POST` | [`/api/v1/agent/hello`](#hello) | Say hello and describe the rig |
 | `GET` | [`/api/v1/agent/projects`](#openprojects) | Browse open projects |
+| `GET` | [`/api/v1/agent/projects/{project_id}/depth`](#projectdepth) | See a project's depth map |
 | `POST` | [`/api/v1/agent/projects/{project_id}/join`](#joinproject) | Join a project |
 | `GET` | [`/api/v1/agent/task`](#tonight) | Ask what to shoot tonight |
 | `POST` | [`/api/v1/agent/task/{task_id}`](#settaskstate) | Accept, decline or finish a share |
@@ -52,13 +53,10 @@ Response `200` ([file](../examples/health.response.json)):
   "ok": true,
   "protocol": 1,
   "time": 1791171001.0,
-  "version": "0.2.14",
+  "version": "0.2.23",
   "adminConfigured": true,
   "discord": true,
-  "roleRequired": false,
-  "features": [
-    "signin"
-  ]
+  "roleRequired": false
 }
 ```
 
@@ -108,7 +106,7 @@ Response `200` ([file](../examples/authLogin.response.json)):
 {
   "code": "EXAMPLE_ONLY_TOKEN_01_xxxxxxxx",
   "url": "https://collab.example/auth/discord/start?code=EXAMPLE_ONLY_TOKEN_01_xxxxxxxx",
-  "expiresIn": 600
+  "expiresIn": 600.0
 }
 ```
 
@@ -228,10 +226,10 @@ Response `200` ([file](../examples/enrolTelescope.response.json)):
     "id": "000000000001",
     "name": "Vega 530",
     "owner": "Vega Observatory",
-    "owner_id": "000000000000000042",
     "created": 1791171016.0,
     "seen": 0.0,
     "profile": {},
+    "owner_id": "000000000000000042",
     "presence": {}
   },
   "token": "EXAMPLE_ONLY_TOKEN_03_xxxxxxxx"
@@ -355,6 +353,30 @@ Every open project, and whether this telescope can help each one.
 | `422` | [`ValidationErrorBody`](../schemas/ValidationErrorBody.schema.json) (`application/json`) | The body does not match its type. |
 
 Example: [Response `200`](../examples/openProjects.response.json).
+
+<a id="projectdepth"></a>
+
+### See a project's depth map
+
+`GET /api/v1/agent/projects/{project_id}/depth`
+
+Token: The telescope's agent token.
+
+Everybody's accepted depth on a fine grid over the region, per filter, and the progress it adds up to.
+
+| Name | In | Type | Notes |
+| --- | --- | --- | --- |
+| `project_id` | path | [`Id`](../schemas/Id.schema.json), required |  |
+
+| Status | Body | Meaning |
+| --- | --- | --- |
+| `200` | [`DepthMap`](../schemas/DepthMap.schema.json) (`application/json`) | Success. |
+| `401` | [`ErrorBody`](../schemas/ErrorBody.schema.json) (`application/json`) | Missing, unknown or revoked token. |
+| `404` | [`ErrorBody`](../schemas/ErrorBody.schema.json) (`application/json`) | No such thing, or not this caller's. |
+| `409` | [`ErrorBody`](../schemas/ErrorBody.schema.json) (`application/json`) | Conflicts with how things stand, such as a rig that cannot meet a project. |
+| `422` | [`ValidationErrorBody`](../schemas/ValidationErrorBody.schema.json) (`application/json`) | The body does not match its type. |
+
+Example: [Response `200`](../examples/projectDepth.response.json).
 
 <a id="joinproject"></a>
 
@@ -559,22 +581,23 @@ Response `200` ([file](../examples/presence.response.json)):
   "telescopes": [
     {
       "id": "000000000001",
-      "name": "Vega 530",
+      "name": "Vega 530 narrowband",
+      "enrolledAs": "Vega 530",
       "owner": "Vega Observatory",
+      "ownerName": "Vega Observatory",
+      "avatar": "",
       "ra": 0.7123,
       "dec": 41.27,
       "state": "imaging",
       "target": "M31 halo in narrowband",
       "project": "000000000002",
       "ageSeconds": 0,
-      "online": true,
-      "ownerName": "Vega Observatory",
-      "avatar": ""
+      "online": true
     }
   ],
   "online": 1,
   "people": 1,
   "onlineSeconds": 1500,
-  "serverTime": 1791171043.0
+  "serverTime": 1791171045.0
 }
 ```

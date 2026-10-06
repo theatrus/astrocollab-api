@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/FilterProgress.schema.json",
+  "title": "FilterProgress",
+  "type": "object",
+  "required": [
+    "goalHours",
+    "atGoal",
+    "average",
+    "thinnest"
+  ],
+  "properties": {
+    "goalHours": {
+      "type": "number",
+      "format": "double",
+      "description": "Depth wanted at every point, hours."
+    },
+    "atGoal": {
+      "type": "number",
+      "format": "double",
+      "description": "Share of the region at the goal depth (within a tenth of it), 0–1."
+    },
+    "average": {
+      "type": "number",
+      "format": "double",
+      "description": "The region's depth against the goal, each point capped at the goal, 0–1."
+    },
+    "thinnest": {
+      "type": "number",
+      "format": "double",
+      "description": "The least-covered point's depth against the goal, 0–1."
+    }
+  },
+  "description": "How far one filter has got across the whole region, everybody's accepted data together."
+}

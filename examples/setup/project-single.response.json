@@ -3,7 +3,6 @@
     "id": "000000000003",
     "name": "M51 in LRGB",
     "coordinator": "coordinator",
-    "owner_id": "",
     "created": 1791171020.0,
     "status": "open",
     "payload": {
@@ -45,6 +44,7 @@
         "B": 5.0
       },
       "notes": ""
-    }
+    },
+    "owner_id": ""
   }
 }
