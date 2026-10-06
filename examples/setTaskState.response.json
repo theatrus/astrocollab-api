@@ -24,7 +24,7 @@
       }
     ],
     "state": "accepted",
-    "version": 4,
+    "version": 3,
     "issued": 1791171029.0,
     "note": "joined by Vega 530",
     "seconds": 72000.0,
@@ -129,7 +129,7 @@
       "moon": 0.036
     },
     "assignedNight": "2026-10-05",
-    "assignedAt": 1791171033.0,
+    "assignedAt": 1791171030.0,
     "dealtHours": 6.0,
     "tiledRotation": null
   }

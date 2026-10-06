@@ -123,11 +123,12 @@
     "visit": {
       "seconds": 3300.0,
       "frames": {
-        "H": 11
+        "O": 11
       },
-      "filter": "H"
+      "filter": "O",
+      "moon": 0.036
     },
-    "assignedNight": "",
+    "assignedNight": "2026-10-05",
     "assignedAt": 1791171030.0,
     "dealtHours": 6.0,
     "tiledRotation": null

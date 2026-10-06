@@ -335,13 +335,15 @@ def compatibility(profile: dict[str, Any], wants: dict[str, Any],
         else:
             check("camera", True, "one-shot colour")
 
-    # A rig must carry every filter the project wants, within its bandpass limits.
+    # A rig needs some of the wanted filters, each within its bandpass limit; it is
+    # dealt only those. The rest are listed for information, not as failures.
     usable, missing = usable_filters(profile, wants, goals)
-    if not missing:
+    if usable:
         check("filters", True, "can shoot " + ", ".join(usable))
+        if missing:
+            check("other filters", True, "will not be dealt: " + "; ".join(missing))
     else:
-        check("filters", False, "; ".join(missing)
-              + (" (can shoot " + ", ".join(usable) + ")" if usable else ""))
+        check("filters", False, "; ".join(missing) or "none of the wanted filters")
 
     exposures = by_letter(profile.get("exposures"))
     low, high = wants["minExposure"], wants["maxExposure"]

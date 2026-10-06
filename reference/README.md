@@ -102,8 +102,9 @@ The rules are in `rules.py`, each a plain function:
 - **A single target's night** spreads over all its filters, by the depth each
   still wants.
 - **Joining** needs the rig's focal length, pixel size and sensor size (`400`
-  without them) and every filter the project wants, within its bandpass limits
-  (`409` with the reason otherwise).
+  without them) and at least one filter the project wants, within its bandpass
+  limit (`409` with the reason otherwise). The share and every night's list use
+  only the wanted filters the rig carries.
 - **Judging** checks every rule the project sets against what the record gives.
   A star-size, guiding or image-scale rule whose measurement is missing goes
   under `unverified`; other rules with nothing to check against are skipped.

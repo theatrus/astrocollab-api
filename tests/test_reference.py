@@ -284,15 +284,29 @@ class Joining(Harness):
         self.assertEqual(status, 400)
         self.assertIn("focal length", answer["detail"])
 
-    def test_a_rig_must_carry_every_filter_the_project_wants(self):
+    def test_a_rig_with_some_of_the_filters_is_dealt_only_those(self):
         token = self.telescope(profile={"filters": {"Ha": 7.0}, "exposures": {"Ha": 300}})
+        listing = {p["name"]: p for p in self.call("GET", "/api/v1/agent/projects", token)[1]["projects"]}
+        verdict = listing[M31]["compatibility"]
+        self.assertTrue(verdict["ok"])
+        self.assertTrue(any("no O" in c["detail"] for c in verdict["checks"] if c["ok"]))
+        status, joined = self.join(token)
+        self.assertEqual(status, 200, joined)
+        self.assertEqual([f["filter"] for f in joined["task"]["filters"]], ["H"])
+        for night, moon in (("2026-10-05", 0.05), ("2026-10-06", 0.95)):
+            visit = self.tonight(token, night, moon, 0.9)["tasks"][0]["visit"]
+            self.assertEqual((visit["filter"], list(visit["frames"])), ("H", ["H"]))
+        # A filter wider than the limit does not count: this rig is dealt O only.
+        wide = self.telescope("Wide", profile={"filters": {"Ha": 12.0, "OIII": 7.0}})
+        self.assertEqual([f["filter"] for f in self.join(wide)[1]["task"]["filters"]], ["O"])
+
+    def test_a_rig_with_none_of_the_filters_cannot_join(self):
+        token = self.telescope(profile={"filters": {"L": None, "Ha": 12.0}})
         listing = {p["name"]: p for p in self.call("GET", "/api/v1/agent/projects", token)[1]["projects"]}
         self.assertFalse(listing[M31]["compatibility"]["ok"])
         status, answer = self.join(token)
         self.assertEqual(status, 409)
         self.assertIn("no O", answer["detail"])
-        wide = self.telescope("Wide", profile={"filters": {"Ha": 12.0, "OIII": 7.0}})
-        self.assertIn("12 nm", self.join(wide)[1]["detail"])
 
     def test_sub_lengths_outside_the_project_are_refused(self):
         token = self.telescope()

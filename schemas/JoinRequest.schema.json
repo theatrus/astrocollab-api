@@ -27,6 +27,39 @@
         "format": "double"
       },
       "description": "The rig's own sub length per filter, seconds."
+    },
+    "night": {
+      "$ref": "NightName.schema.json",
+      "description": "The night the rig is in, so the first deal is tonight's.",
+      "default": ""
+    },
+    "moon": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "How much of the Moon is lit tonight, 0–1."
+    },
+    "moonUp": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "The fraction of the dark hours the Moon is up, 0–1."
     }
   }
 }

@@ -8,8 +8,8 @@ maps each file to its type.
 
 ## Discover the server
 
-[Health](../examples/health.response.json) gives the protocol number, 1, and the
-server's build. [Sign-in status](../examples/authStatus.response.json) says
+[Health](../examples/health.response.json) gives the protocol number, 1, the
+server's build, and `features`: this server offers sign-in. [Sign-in status](../examples/authStatus.response.json) says
 sign-in is on; this server signs people in with Discord.
 
 ## Sign in and enrol
@@ -48,8 +48,9 @@ The [reply](../examples/hello.response.json) gives its ID and the server's time.
   H and of O at every point, with stars under 3.5″, subs of 120–600 s, 30° from
   the Moon and above 30° altitude. Vega 530 can help.
 
-The [join](../examples/joinProject.request.json) sends the rig's own sub lengths.
-The [reply](../examples/joinProject.response.json) is an `accepted` share: the
+The [join](../examples/joinProject.request.json) sends the rig's own sub lengths,
+and tonight's night and Moon so the first list is dealt at once. The
+[reply](../examples/joinProject.response.json) is an `accepted` share: the
 whole mosaic tiled with nine cells of Vega 530's field, turned to 35°, at 300 s
 in H and O.
 

@@ -10,7 +10,9 @@
       "target": "M31 halo in narrowband",
       "project": "000000000002",
       "ageSeconds": 0,
-      "online": true
+      "online": true,
+      "ownerName": "Vega Observatory",
+      "avatar": ""
     }
   ],
   "online": 1,

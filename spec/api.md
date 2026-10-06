@@ -52,10 +52,13 @@ Response `200` ([file](../examples/health.response.json)):
   "ok": true,
   "protocol": 1,
   "time": 1791171001.0,
-  "version": "0.2.9",
+  "version": "0.2.14",
   "adminConfigured": true,
   "discord": true,
-  "roleRequired": false
+  "roleRequired": false,
+  "features": [
+    "signin"
+  ]
 }
 ```
 
@@ -361,7 +364,7 @@ Example: [Response `200`](../examples/openProjects.response.json).
 
 Token: The telescope's agent token.
 
-Takes a share of a project, checked against the profile the rig last sent. The share is the whole region tiled with this rig's own camera, at its own sub lengths. Joining twice returns the share already held. Joining is consent: the share arrives accepted. A rig that has not described its optics gets 400; one that cannot meet the rules gets 409.
+Takes a share of a project, checked against the profile the rig last sent. The share is the whole region tiled with this rig's own camera, at its own sub lengths. Joining twice returns the share already held. Joining is consent: the share arrives accepted. Sending the night and the Moon deals tonight's list at once, as `tonight` would. A rig that has not described its optics gets 400; one that cannot meet the rules gets 409.
 
 | Name | In | Type | Notes |
 | --- | --- | --- | --- |
@@ -389,7 +392,10 @@ Request ([file](../examples/joinProject.request.json)):
     "OIII": 300.0,
     "SII": 300.0,
     "L": 120.0
-  }
+  },
+  "night": "2026-10-05",
+  "moon": 0.12,
+  "moonUp": 0.3
 }
 ```
 
@@ -561,7 +567,9 @@ Response `200` ([file](../examples/presence.response.json)):
       "target": "M31 halo in narrowband",
       "project": "000000000002",
       "ageSeconds": 0,
-      "online": true
+      "online": true,
+      "ownerName": "Vega Observatory",
+      "avatar": ""
     }
   ],
   "online": 1,

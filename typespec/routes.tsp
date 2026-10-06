@@ -216,6 +216,15 @@ model JoinRequest {
 
   /** The rig's own sub length per filter, seconds. */
   exposures?: Record<float64>;
+
+  /** The night the rig is in, so the first deal is tonight's. */
+  night?: NightName = "";
+
+  /** How much of the Moon is lit tonight, 0–1. */
+  @minValue(0) @maxValue(1) moon?: float64 | null;
+
+  /** The fraction of the dark hours the Moon is up, 0–1. */
+  @minValue(0) @maxValue(1) moonUp?: float64 | null;
 }
 
 model JoinResponse {
@@ -287,7 +296,8 @@ op openProjects(): Ok<OpenProjects> | Errors;
 /**
  * Takes a share of a project, checked against the profile the rig last sent. The share is
  * the whole region tiled with this rig's own camera, at its own sub lengths. Joining twice
- * returns the share already held. Joining is consent: the share arrives accepted. A rig that
+ * returns the share already held. Joining is consent: the share arrives accepted. Sending the
+ * night and the Moon deals tonight's list at once, as `tonight` would. A rig that
  * has not described its optics gets 400; one that cannot meet the rules gets 409.
  */
 @summary("Join a project")

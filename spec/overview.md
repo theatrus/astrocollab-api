@@ -148,7 +148,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 ```json
 {
   "id": "000000000004", "projectName": "M31 halo in narrowband",
-  "state": "accepted", "version": 3, "kind": "mosaic",
+  "state": "accepted", "version": 2, "kind": "mosaic",
   "filters": [ { "filter": "H", "exposure": 300.0, "hours": 10.0 },
                { "filter": "O", "exposure": 300.0, "hours": 10.0 } ],
   "share": [0, 1, 2, 3, 4, 5],

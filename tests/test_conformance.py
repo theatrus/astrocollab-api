@@ -307,8 +307,13 @@ def starfront_server():
 
 
 #: Checks Starfront is known to fail, each with what the spec says. The test passes
-#: while Starfront fails only these, and says so when one of them starts passing.
-STARFRONT_GAPS: set[str] = set()
+#: while Starfront fails exactly these: a gap Starfront has closed fails it too, so the
+#: list cannot go stale.
+STARFRONT_GAPS = {
+    # The spec lets a rig join with some of a project's filters and be dealt only those;
+    # Starfront refuses such a rig with 409 ("no H").
+    "a_rig_with_some_filters_joins_and_is_dealt_only_those",
+}
 
 
 class StarfrontServerTests(unittest.TestCase):
@@ -322,8 +327,7 @@ class StarfrontServerTests(unittest.TestCase):
         failed = {line.split()[1] for line in output.splitlines() if line.startswith("FAIL")}
         self.assertLessEqual(failed, STARFRONT_GAPS, output)
         fixed = STARFRONT_GAPS - failed
-        if fixed:
-            print(f"\nStarfront now passes {sorted(fixed)}; take it out of STARFRONT_GAPS.")
+        self.assertEqual(fixed, set(), "Starfront now passes these; take them out of STARFRONT_GAPS")
 
 
 if __name__ == "__main__":

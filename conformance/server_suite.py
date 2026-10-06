@@ -156,7 +156,9 @@ class Suite:
             ("join_tiles_the_region_with_the_rig_s_own_field", "Joining", self.join),
             ("joining_twice_returns_the_same_share", "Joining", self.join_twice),
             ("an_undescribed_rig_is_refused_with_400", "Joining", self.join_undescribed),
-            ("a_rig_that_cannot_help_is_refused", "Joining", self.join_refused),
+            ("a_rig_with_none_of_the_filters_is_refused", "Joining", self.join_refused),
+            ("a_rig_with_some_filters_joins_and_is_dealt_only_those", "Joining", self.join_partial),
+            ("a_rig_with_every_filter_takes_its_share", "Joining", self.join_second),
             ("a_single_target_is_one_frame", "Joining", self.join_single),
             ("tonight_returns_every_share", "Tonight", self.tonight_first),
             ("bright_moon_deals_red_narrowband", "Moon", self.bright_moon),
@@ -567,30 +569,55 @@ class Suite:
         return f"400: {refused.detail}"
 
     def join_refused(self) -> str:
+        """A rig with none of the wanted filters cannot help: 409 with the reason."""
         rig = self.rig(1)
-        wants = self.project(self.mosaic_id).get("requirements") or {}
-        bad = dict(self.good_profile(rig.name))
         wanted = self.wanted(self.project(self.mosaic_id))
-        if len(wanted) >= 1:
-            # Every filter but one: a rig must carry every filter the project wants.
-            dropped = wanted[-1]
-            bad["filters"] = {k: v for k, v in bad["filters"].items() if fold(k) != dropped}
-            bad["exposures"] = {k: v for k, v in bad["exposures"].items() if fold(k) != dropped}
-        elif wants.get("maxFocalLength") is not None:
-            bad["focalLength"] = float(wants["maxFocalLength"]) * 2
-        elif wants.get("minFocalLength") is not None:
-            bad["focalLength"] = float(wants["minFocalLength"]) / 2
-        else:
-            raise Skip("the mosaic has no filter or focal rule to fail")
+        need(wanted, "the mosaic names no filters")
+        bad = dict(self.good_profile(rig.name))
+        bad["filters"] = {"Dual band": 7.0}
+        bad["exposures"] = {"Dual band": 300.0}
         expect(self.hello(rig, bad), 200, "hello")
         refused = self.client.post(f"{API}/agent/projects/{self.mosaic_id}/join", rig.token, self.join_body(rig))
-        need(refused.status == 409, f"a rig that cannot help joined: {refused.status}")
+        need(refused.status == 409, f"a rig with none of the wanted filters got {refused.status}, not 409")
         need(isinstance(refused.detail, str) and refused.detail, "the 409 gives no reason")
+        return f"409: {refused.detail}"
+
+    def join_partial(self) -> str:
+        """A rig with some of the wanted filters joins, and is dealt only those.
+
+        It carries only the dark-night filter and asks on a bright night, so a server
+        that ignored what it carries would deal H or S.
+        """
+        rig = self.rig(1)
+        wanted = self.wanted(self.project(self.mosaic_id))
+        if len(wanted) < 2:
+            raise Skip("the mosaic wants only one filter")
+        dark = [letter for letter in wanted if letter in DARK_NIGHT]
+        keep = dark[0] if dark else wanted[-1]
+        profile = dict(self.good_profile(rig.name))
+        profile["filters"] = {k: v for k, v in profile["filters"].items() if fold(k) == keep}
+        profile["exposures"] = {k: v for k, v in profile["exposures"].items() if fold(k) == keep}
+        expect(self.hello(rig, profile), 200, "hello")
+        joined = self.client.post(f"{API}/agent/projects/{self.mosaic_id}/join", rig.token, self.join_body(rig))
+        need(joined.status == 200,
+             f"a rig carrying {keep}, one of {sorted(wanted)}, was refused: {joined.status} {joined.detail}")
+        task = joined.json.get("task") or {}
+        dealt = {fold(entry.get("filter")) for entry in task.get("filters") or []}
+        need(dealt and dealt <= {keep}, f"the share deals {sorted(dealt)}; the rig carries only {keep}")
+        tonight = self.share_of(self.tonight(rig, self.night("part"), 0.9, 0.9), self.mosaic_id)
+        frames = {fold(name) for name in ((tonight.get("visit") or {}).get("frames") or {})}
+        need(frames and frames <= {keep}, f"tonight deals {sorted(frames)}; the rig carries only {keep}")
+        return f"joined carrying only {keep}, and was dealt only {keep} on a bright night"
+
+    def join_second(self) -> str:
+        """Rig 2, described with every filter, holds a share for the checks that follow."""
+        rig = self.rig(1)
         expect(self.hello(rig, self.good_profile(rig.name)), 200, "hello")
         data = expect(self.client.post(f"{API}/agent/projects/{self.mosaic_id}/join", rig.token,
-                                       self.join_body(rig)), 200, "join after fixing the rig")
+                                       self.join_body(rig)), 200, "join")
         self.task2 = data.get("task")
-        return f"409: {refused.detail}"
+        need(self.task2 and self.task2.get("state") == "accepted", "rig 2 holds no accepted share")
+        return "accepted"
 
     def join_single(self) -> str:
         rig = self.rig(0)

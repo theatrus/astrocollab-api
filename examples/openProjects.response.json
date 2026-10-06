@@ -74,7 +74,33 @@
       "collected": {},
       "participants": 0,
       "participantsOnline": 0,
-      "participantNames": []
+      "participantNames": [],
+      "progress": {
+        "L": {
+          "goalHours": 20.0,
+          "atGoal": 0.0,
+          "average": 0.0,
+          "thinnest": 0.0
+        },
+        "R": {
+          "goalHours": 5.0,
+          "atGoal": 0.0,
+          "average": 0.0,
+          "thinnest": 0.0
+        },
+        "G": {
+          "goalHours": 5.0,
+          "atGoal": 0.0,
+          "average": 0.0,
+          "thinnest": 0.0
+        },
+        "B": {
+          "goalHours": 5.0,
+          "atGoal": 0.0,
+          "average": 0.0,
+          "thinnest": 0.0
+        }
+      }
     },
     {
       "id": "000000000002",
@@ -146,7 +172,21 @@
       "collected": {},
       "participants": 0,
       "participantsOnline": 0,
-      "participantNames": []
+      "participantNames": [],
+      "progress": {
+        "H": {
+          "goalHours": 10.0,
+          "atGoal": 0.0,
+          "average": 0.0,
+          "thinnest": 0.0
+        },
+        "O": {
+          "goalHours": 10.0,
+          "atGoal": 0.0,
+          "average": 0.0,
+          "thinnest": 0.0
+        }
+      }
     }
   ],
   "protocol": 1

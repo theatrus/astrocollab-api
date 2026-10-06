@@ -194,7 +194,9 @@ joined = call("POST", f"/api/v1/agent/projects/{mosaic_id}/join", name="joinProj
               operation="joinProject", request_schema="JoinRequest",
               response_schema="JoinResponse", token=rig,
               body={"hours": 0.0, "exposure": 0.0,
-                    "exposures": {"Ha": 300.0, "OIII": 300.0, "SII": 300.0, "L": 120.0}})
+                    "exposures": {"Ha": 300.0, "OIII": 300.0, "SII": 300.0, "L": 120.0},
+                    # As asking for tonight does: the first list is tonight's.
+                    "night": "2026-10-05", "moon": 0.12, "moonUp": 0.3})
 
 query = {"night": "2026-10-05", "moon": 0.12, "moonUp": 0.3}
 save("tonight.query.json", query, "tonight", "query", None)

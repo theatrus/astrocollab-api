@@ -23,9 +23,12 @@ API. Starfront's capture app and server are the first implementation.
 - **Tokens:** a person signs in with the device flow and enrols telescopes, or a
   telescope pairs with a code. Person and telescope tokens never stand in for each
   other.
+- **Joining** may carry the night and the Moon, as Starfront now sends, so a
+  share's first list is tonight's.
 - **Rigs** describe their sub length per filter (what their darks are built for),
   hours per night and time window, and may share where they point.
-- **Filter names** fold to one letter: L, R, G, B, H, O, S.
+- **Filter names** fold to one letter: L, R, G, B, H, O, S. A rig may join with
+  only some of a project's filters and is dealt only those.
 - **Errors** are `{"detail": ...}`. Objects are open: unknown fields are kept or
   ignored, never refused.
 - Coordinator routes, the 0.1 contributor routes and API keys, the code

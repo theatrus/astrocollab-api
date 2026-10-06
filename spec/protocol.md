@@ -188,8 +188,11 @@ on it. Each listing also shows the accepted hours so far and who is taking part.
 hello with its focal length, sensor size and pixel size gets `400`: the server
 cannot cut cells without them. Otherwise the server checks the requirements
 against the rig's profile itself and against its sub lengths, and answers `409`
-with the reason if they are not met. A rig must carry every filter the project
-wants, within its bandpass limits. The share is the whole region tiled with this
+with the reason if they are not met. A join MAY carry the night, `moon` and
+`moonUp`, as asking for tonight does, so the share's first list is tonight's and
+made with the Moon in mind. A rig need carry only some of the filters
+a project wants, each within its bandpass limit; its share and every night's list
+use only those. A rig with none of them cannot help. The share is the whole region tiled with this
 rig's camera, at its own sub lengths. Joining is consent: the share arrives
 `accepted`. Joining twice returns the share already held.
 
@@ -218,6 +221,7 @@ Rules for dealing a night:
   hours it gives that night change by more than 15%.
 - A visit to a panel MUST NOT be shorter than the project's `minFramesPerVisit`
   in any filter, because a rig stacks its own frames first.
+- A rig is dealt only filters it carries.
 - On a mosaic, a rig SHOULD shoot one filter a night: every panel gets a stack in
   that filter, the wheel never turns between panels, and one set of flats
   serves the night.

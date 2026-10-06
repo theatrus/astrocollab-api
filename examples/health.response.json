@@ -2,8 +2,11 @@
   "ok": true,
   "protocol": 1,
   "time": 1791171001.0,
-  "version": "0.2.9",
+  "version": "0.2.14",
   "adminConfigured": true,
   "discord": true,
-  "roleRequired": false
+  "roleRequired": false,
+  "features": [
+    "signin"
+  ]
 }

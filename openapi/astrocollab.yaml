@@ -182,6 +182,27 @@ paths:
                       participants: 0
                       participantsOnline: 0
                       participantNames: []
+                      progress:
+                        L:
+                          goalHours: 20.0
+                          atGoal: 0.0
+                          average: 0.0
+                          thinnest: 0.0
+                        R:
+                          goalHours: 5.0
+                          atGoal: 0.0
+                          average: 0.0
+                          thinnest: 0.0
+                        G:
+                          goalHours: 5.0
+                          atGoal: 0.0
+                          average: 0.0
+                          thinnest: 0.0
+                        B:
+                          goalHours: 5.0
+                          atGoal: 0.0
+                          average: 0.0
+                          thinnest: 0.0
                     - id: '000000000002'
                       name: M31 halo in narrowband
                       coordinator: coordinator
@@ -238,6 +259,17 @@ paths:
                       participants: 0
                       participantsOnline: 0
                       participantNames: []
+                      progress:
+                        H:
+                          goalHours: 10.0
+                          atGoal: 0.0
+                          average: 0.0
+                          thinnest: 0.0
+                        O:
+                          goalHours: 10.0
+                          atGoal: 0.0
+                          average: 0.0
+                          thinnest: 0.0
                     protocol: 1
         '401':
           description: Missing, unknown or revoked token.
@@ -262,7 +294,9 @@ paths:
 
         the whole region tiled with this rig''s own camera, at its own sub lengths. Joining twice
 
-        returns the share already held. Joining is consent: the share arrives accepted. A rig that
+        returns the share already held. Joining is consent: the share arrives accepted. Sending the
+
+        night and the Moon deals tonight''s list at once, as `tonight` would. A rig that
 
         has not described its optics gets 400; one that cannot meet the rules gets 409.'
       parameters:
@@ -379,9 +413,10 @@ paths:
                       visit:
                         seconds: 3300.0
                         frames:
-                          H: 11
-                        filter: H
-                      assignedNight: ''
+                          O: 11
+                        filter: O
+                        moon: 0.036
+                      assignedNight: '2026-10-05'
                       assignedAt: 1791171030.0
                       dealtHours: 6.0
                       tiledRotation: null
@@ -458,6 +493,9 @@ paths:
                     OIII: 300.0
                     SII: 300.0
                     L: 120.0
+                  night: '2026-10-05'
+                  moon: 0.12
+                  moonUp: 0.3
   /api/v1/agent/report:
     post:
       operationId: report
@@ -633,7 +671,7 @@ paths:
                         exposure: 300.0
                         hours: 10.0
                       state: accepted
-                      version: 3
+                      version: 2
                       issued: 1791171029.0
                       note: joined by Vega 530
                       seconds: 72000.0
@@ -716,7 +754,7 @@ paths:
                         filter: O
                         moon: 0.036
                       assignedNight: '2026-10-05'
-                      assignedAt: 1791171033.0
+                      assignedAt: 1791171030.0
                       dealtHours: 6.0
                       tiledRotation: null
                     tasks:
@@ -738,7 +776,7 @@ paths:
                         exposure: 300.0
                         hours: 10.0
                       state: accepted
-                      version: 3
+                      version: 2
                       issued: 1791171029.0
                       note: joined by Vega 530
                       seconds: 72000.0
@@ -821,7 +859,7 @@ paths:
                         filter: O
                         moon: 0.036
                       assignedNight: '2026-10-05'
-                      assignedAt: 1791171033.0
+                      assignedAt: 1791171030.0
                       dealtHours: 6.0
                       tiledRotation: null
                     requirementsByProject:
@@ -844,7 +882,7 @@ paths:
                         minAltitude: 30.0
                         requireCalibrated: false
                         minFramesPerVisit: 10
-                    version: 3
+                    version: 2
                     protocol: 1
                     requirements:
                       minFocalLength: null
@@ -923,7 +961,7 @@ paths:
                         exposure: 300.0
                         hours: 10.0
                       state: accepted
-                      version: 4
+                      version: 3
                       issued: 1791171029.0
                       note: joined by Vega 530
                       seconds: 72000.0
@@ -1006,7 +1044,7 @@ paths:
                         filter: O
                         moon: 0.036
                       assignedNight: '2026-10-05'
-                      assignedAt: 1791171033.0
+                      assignedAt: 1791171030.0
                       dealtHours: 6.0
                       tiledRotation: null
         '401':
@@ -1340,10 +1378,12 @@ paths:
                     ok: true
                     protocol: 1
                     time: 1791171001.0
-                    version: 0.2.9
+                    version: 0.2.14
                     adminConfigured: true
                     discord: true
                     roleRequired: false
+                    features:
+                    - signin
       tags:
       - discovery
       security:
@@ -1445,6 +1485,8 @@ paths:
                       project: '000000000002'
                       ageSeconds: 0
                       online: true
+                      ownerName: Vega Observatory
+                      avatar: ''
                     online: 1
                     people: 1
                     onlineSeconds: 1500
@@ -1752,6 +1794,26 @@ components:
             type: number
             format: double
           description: The rig's own sub length per filter, seconds.
+        night:
+          $ref: '#/components/schemas/NightName'
+          description: The night the rig is in, so the first deal is tonight's.
+          default: ''
+        moon:
+          anyOf:
+          - type: number
+            format: double
+          - type: 'null'
+          minimum: 0
+          maximum: 1
+          description: How much of the Moon is lit tonight, 0–1.
+        moonUp:
+          anyOf:
+          - type: number
+            format: double
+          - type: 'null'
+          minimum: 0
+          maximum: 1
+          description: The fraction of the dark hours the Moon is up, 0–1.
     JoinResponse:
       type: object
       required:
