@@ -23,9 +23,9 @@ With that token the program [enrols the telescope](../examples/enrolTelescope.re
 and gets [its own token](../examples/enrolTelescope.response.json), shown once.
 [Listing telescopes](../examples/listTelescopes.response.json) shows it, without
 the token. [Pairing](../examples/extra/pairTelescope.request.json) is the other
-way in, with the [same reply](../examples/extra/pairTelescope.response.json);
-Starfront does not offer it yet, so those two files are written by hand, as is
-[signing out](../examples/extra/authLogout.response.json).
+way in, with the [same reply](../examples/extra/pairTelescope.response.json).
+The captured server signs people in instead, so those two files are written by
+hand, as is [signing out](../examples/extra/authLogout.response.json).
 
 ## Say hello
 

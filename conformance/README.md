@@ -98,10 +98,9 @@ protocol leaves out: the reference server's Python tools, and Starfront's
 coordinator route with its admin token. The suite itself uses only the
 contract's routes.
 
-Checks Starfront is known to fail go in `STARFRONT_GAPS` in the test, with what
-the spec says. Today there is one: Starfront refuses a rig that carries only some
-of a project's filters, which the spec lets join. The test passes while Starfront
-fails only known gaps, and says when one starts passing.
+Where Starfront's server and this draft differ, the check is listed in
+`STARFRONT_GAPS` in the test, so the test follows both as they change. It says
+when a listed check starts passing, so the list stays current.
 
 ## What it cannot check
 

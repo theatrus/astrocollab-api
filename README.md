@@ -75,7 +75,8 @@ Markdown REST reference, `spec/api.md`.
 
 The examples are captured from Starfront's server by
 `tools/capture_starfront_examples.py`, run with a Starfront checkout's Python;
-`examples/extra/` holds the few written by hand for routes Starfront lacks. The
+`examples/extra/` holds the few written by hand, for routes the captured server
+does not use. The
 schemas and the reference need no OpenAPI tools. CI fails if any output is
 stale.
 
