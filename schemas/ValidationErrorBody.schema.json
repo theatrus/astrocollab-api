@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/ValidationErrorBody.schema.json",
+  "title": "ValidationErrorBody",
+  "type": "object",
+  "required": [
+    "detail"
+  ],
+  "properties": {
+    "detail": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "loc": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              ]
+            }
+          },
+          "msg": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ]
+      }
+    }
+  },
+  "description": "A request body that does not match its type. Each entry names a field and the problem."
+}

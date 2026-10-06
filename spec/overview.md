@@ -1,319 +1,245 @@
-# How the API works
+# How a night works
 
-A project is one deep image that many astrophotographers shoot together, such
-as a 600-hour H-alpha mosaic of M31. It says which targets to shoot, through
-which filters, and how many hours each panel needs. Everyone shoots on their own
-nights with their own gear. At dusk each rig asks the server what to shoot and
-gets the panel that most needs data and fits its field and filters. The subs
-come back, the server checks them, and the good ones go into the stack.
+This is a draft specification for capture software, such as Starfront or
+N.I.N.A., to build in. Starfront already speaks it. This page follows one
+telescope from getting its token to having its subs counted, and is written for
+people adding the API to their software. Every snippet is a real payload,
+captured from Starfront's server; full files are in [`examples/`](../examples).
 
-The server never moves your mount and never reserves a target. Two people can
-shoot the same panel on the same night; good data from both counts.
+A project is one deep image that many astrophotographers shoot together, such as
+a 10-hour-per-filter narrowband mosaic of M31's halo. It names a region of sky,
+the depth wanted in each filter, and the rules data must meet. Each telescope
+takes a share, tiles the region with its own camera, and every night asks which
+panels to shoot. It reports what it shot; the server checks the numbers and
+counts the good nights toward the project.
 
-This is a draft specification for capture software, such as N.I.N.A., to build
-in. No software supports it yet. This page follows one rig from pairing to
-counted subs, and is written for people adding the API to their software. Each step
-shows the request and the important part of the response. Full payloads are in
-[`examples/`](../examples), and the [reference server](../reference/README.md)
-runs every step on your machine, with sample projects.
+The server never moves your mount and never reserves sky.
 
 ## The flow
 
-| Step | Where | Request |
+| Step | Request | Token |
 | --- | --- | --- |
-| 1. Join a project and get a pairing code | Server's web pages | None |
-| 2. Pair the client | Client | `POST /pair` |
-| 3. Describe the rig | Client | `PUT /me/equipment/{rig}` |
-| 4. Ask what to image | Client | `POST /me/checkins` |
-| 5. Capture | Your own software | None |
-| 6. Upload | Client | `POST /projects/{id}/submissions`, `PUT /uploads/{id}/parts/{n}`, `POST /submissions/{id}/finalize` |
-| 7. Read the result | Client | `GET /submissions/{id}`, `GET /projects/{id}/progress` |
+| 1. Get a telescope token | `POST /api/v1/auth/login`, then `POST /api/v1/agents`; or `POST /api/v1/pair` | None, then a person's |
+| 2. Describe the rig | `POST /api/v1/agent/hello` | The telescope's |
+| 3. Find a project | `GET /api/v1/agent/projects` | The telescope's |
+| 4. Join it | `POST /api/v1/agent/projects/{id}/join` | The telescope's |
+| 5. Ask what to shoot tonight | `GET /api/v1/agent/task?night=…&moon=…&moonUp=…` | The telescope's |
+| 6. Shoot | Your own software | — |
+| 7. Report what you shot | `POST /api/v1/agent/report` | The telescope's |
 
-Steps 1 to 3 happen once per rig. Steps 4 to 7 repeat each night. The examples
-use these shell variables:
+Steps 1 to 4 happen once. Steps 5 to 7 repeat each night; programs typically ask
+every ten minutes, which also keeps the telescope shown as online. The examples
+use two shell variables:
 
 ```sh
-API=https://collab.example/v1   # the server's API root, from GET /capabilities
-KEY=...                          # the API key from step 2
-INSTALLATION=$(uuidgen)          # made once per installation, then kept
-RIG=$(uuidgen)                   # made once per rig, then kept
+SERVER=https://collab.example   # the server's address
+TOKEN=...                       # the telescope's token, from step 1
 ```
 
-## 1. Join a project and get a pairing code
+## 1. Get a telescope token
 
-The user does this in a browser. The server's `account_url` from
-`GET /capabilities` leads to its pages. There the user picks a project, accepts
-its terms, and issues a pairing code for the rig. Servers should let the user do
-both in one step on the project page.
+There are two ways; a server's `GET /api/v1/health` lists which it offers in
+`features`.
 
-A project says what it wants back:
-
-- **Calibrated subs:** each calibrated exposure as its own file. The project
-  stacks everything.
-- **Stacked masters:** you stack your own subs and send the master, with a list
-  of the subs inside it.
-
-The client finds the projects you joined with `GET /me/projects`.
-
-## 2. Pair the client
-
-The user enters the code in the client. The client trades it for its own API
-key. This request needs no `Authorization` header:
+**Sign in, then enrol.** The program asks for a login code and opens the page it
+gives in the browser:
 
 ```sh
-curl -X POST $API/pair \
-  -H "Content-Type: application/json" \
-  -d '{"pairing_code": "acpc_...", "installation_id": "'$INSTALLATION'", "client_name": "Roof rig 2"}'
+curl -X POST $SERVER/api/v1/auth/login
 ```
 
 ```json
-{ "key_id": "00000000-0000-4000-8000-000000000018", "api_key": "acpk_...", "client_name": "Roof rig 2" }
+{ "code": "EXAMPLE_ONLY_TOKEN_01_xxxxxxxx", "url": "https://collab.example/auth/discord/start?code=EXAMPLE_ONLY_TOKEN_01_xxxxxxxx", "expiresIn": 600 }
 ```
 
-The key appears only in this response. Store it in the system credential store
-and send it on every other request. See [Authentication](authentication.md).
-
-## 3. Describe the rig
-
-The server hands out work by what each rig can do: its field of view, sampling,
-filters, color or mono sensor, and, if given, where it is. The user may enter
-some of this on the server's web pages when setting the rig up; a pairing code
-issued for that rig returns its `equipment_id`. The client can fill in the rest.
-
-To register a new rig, or replace its description:
+The person signs in there. The program polls `GET /api/v1/auth/poll?code=…`
+until `state` is `done`, which hands over the person's token once. With that, it
+enrols the telescope:
 
 ```sh
-curl -X PUT $API/me/equipment/$RIG \
-  -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/json" \
-  -d @examples/registerEquipment.request.json
+curl -X POST $SERVER/api/v1/agents \
+  -H "Authorization: Bearer $PERSON" -H "Content-Type: application/json" \
+  -d '{"name": "Vega 530"}'
 ```
 
-The example describes a 6248×4176 mono camera with 3.76 µm pixels on a 400 mm
-lens, with an H-alpha filter: about 3.4°×2.2° of sky. To change only some fields
-and keep the rest, such as filters entered on the web, send a merge patch:
+The reply holds the telescope's own `token`, shown once. Store it in the system
+credential store.
+
+**Pairing.** On servers that offer it, the person issues a code on the server's
+web pages, and the program trades it for the same reply:
+`POST /api/v1/pair` with `{"code": "…", "name": "Vega 530"}`.
+
+The two tokens never stand in for each other: a person token cannot fetch work,
+and a telescope token cannot enrol. See [Authentication](authentication.md).
+
+## 2. Describe the rig
+
+Say hello with what the program already knows: optics, sensor, filters with
+their bandpasses, the sub length each filter is shot at, and what the rig
+usually achieves.
 
 ```sh
-curl -X PATCH $API/me/equipment/$RIG \
-  -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/merge-patch+json" \
-  -d '{"focal_length_mm": 402.5}'
-```
-
-Each filter lists its passbands. A dual-narrowband filter on a color camera
-lists two, H-alpha and OIII, so one night can serve two objectives.
-[Color rig example](../examples/color-rig-equipment.json).
-
-## 4. Ask what to image
-
-```sh
-curl -X POST $API/me/checkins \
-  -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"equipment_id": "'$RIG'", "observed_at": "2026-10-04T04:00:00Z"}'
-```
-
-The server looks at every project you have joined, picks where this rig helps
-most, and assigns it work:
-
-```json
-{
-  "action": "image",
-  "next_checkin_seconds": 600,
-  "assignment": {
-    "id": "00000000-0000-4000-8000-000000000014",
-    "project_id": "00000000-0000-4000-8000-000000000001",
-    "expires_at": "2026-10-05T04:00:00Z",
-    "panels": [
-      { "id": "00000000-0000-4000-8000-000000000015",
-        "target_name": "M31 outer disk",
-        "footprint": {
-          "center": { "ra_degrees": 10.6847, "dec_degrees": 41.269 },
-          "width_degrees": 3.36, "height_degrees": 2.24, "position_angle_degrees": 0 },
-        "filter_id": "00000000-0000-4000-8000-000000000008",
-        "objective_ids": ["00000000-0000-4000-8000-000000000005"],
-        "exposure_seconds": 300,
-        "suggested_frames": 96 }
-    ]
-  }
-}
-```
-
-Each panel says where to point, which filter to use, how long each exposure
-should be and how many to take. [Full response](../examples/checkIn.response.json).
-
-You will rarely get a whole mosaic. When a target is bigger than your field, the
-server splits it into a grid and gives you the panel that most needs data;
-`layout` says which column and row it is. Other rigs get other panels. An
-assignment may list a few panels in order: move to the next when the current one
-has its suggested frames. Later check-ins may send you to another panel or target
-as the picture fills in.
-
-| `action` | What to do |
-| --- | --- |
-| `image` | Work through the panels in `assignment`, in order. |
-| `continue` | Keep working on your current assignment. |
-| `wait` | Nothing suits this rig now. `reason_codes` say why, such as `rig_incomplete`. |
-
-Check in again after `next_checkin_seconds`. Send the assignment you are working
-on as `assignment_id`, and report what you have captured but not yet submitted
-as `unsubmitted_captures`: totals per panel, replacing your last report. You
-don't have to upload to show progress. The server counts reported frames when it
-hands out work, which matters most in a masters project, where subs wait until
-there are enough to stack. There is nothing to accept or decline: your own software still
-decides when and whether to point the rig, within its own safety limits.
-
-## 5. Capture
-
-Capture and calibrate with your usual software. Keep the recommendation and
-panel IDs with each frame; the manifest refers to them. For a masters project,
-stack your subs once you have enough for the project's `master_rules`.
-
-## 6. Upload
-
-Upload happens in three requests: describe, send bytes, finish.
-
-**Describe.** Send a manifest with an `id` you choose. It lists each file with
-its hash, size, exposure and calibration history.
-[Example with subs](../examples/createSubmission.request.json);
-[example with a master](../examples/stacked-master-submission.json).
-
-```sh
-curl -X POST $API/projects/$PROJECT/submissions \
-  -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/json" \
-  -d @manifest.json
-```
-
-A master adds a `stack` block: every sub in it by capture ID, time and hash, and
-how they were registered, normalized, rejected and weighted.
-
-The server answers with one upload session per file. It chooses the part size:
-
-```json
-{
-  "id": "00000000-0000-4000-8000-000000000012",
-  "state": "uploading",
-  "uploads": [
-    { "id": "00000000-0000-4000-8000-000000000013", "size_bytes": 104371200,
-      "part_size_bytes": 8388608, "part_count": 13, "received_parts": [] }
-  ]
-}
-```
-
-**Send bytes.** Split the file into `part_count` parts. Every part has exactly
-`part_size_bytes` bytes except the last. Send each part with its SHA-256:
-
-```sh
-curl -X PUT $API/uploads/$UPLOAD/parts/1 \
-  -H "Authorization: Bearer $KEY" \
-  -H "Content-Type: application/octet-stream" \
-  -H "X-Part-SHA256: $(sha256sum part1 | cut -d' ' -f1)" \
-  --data-binary @part1
-```
-
-Parts may arrive in any order. Sending the same part again is safe. If the
-connection drops, `GET /uploads/{id}` shows which parts arrived.
-
-**Finish.**
-
-```sh
-curl -X POST $API/submissions/$SUBMISSION/finalize \
-  -H "Authorization: Bearer $KEY"
-```
-
-The server answers `202` with the submission in `processing`.
-
-## 7. Read the result
-
-Read the submission until its `state` is `complete`. Each artifact then shows
-`accepted` or `rejected`, with reasons:
-
-```sh
-curl -H "Authorization: Bearer $KEY" $API/submissions/$SUBMISSION
-```
-
-Accepted data counts toward the shared picture:
-
-```sh
-curl -H "Authorization: Bearer $KEY" $API/projects/$PROJECT/progress
+curl -X POST $SERVER/api/v1/agent/hello \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d @examples/hello.request.json
 ```
 
 ```json
 {
-  "objectives": [
-    { "goal": { "accepted_frames": 120, "accepted_integration_seconds": 36000 },
-      "accepted_frames": 1, "accepted_integration_seconds": 300, "complete": false }
-  ]
+  "protocol": 1,
+  "profile": {
+    "name": "Vega 530",
+    "focalLength": 530.0, "pixelSize": 3.76, "sensorWidth": 6248, "sensorHeight": 4176,
+    "filters": { "Ha": 7.0, "OIII": 7.0, "SII": 7.0, "L": null },
+    "colour": false, "rotation": null,
+    "typicalHfr": 2.4, "typicalGuideRms": 0.62,
+    "exposures": { "Ha": 300.0, "OIII": 300.0, "SII": 300.0, "L": 120.0 },
+    "hoursPerNight": 6.0, "windowFrom": "21:30", "windowTo": "04:30"
+  },
+  "presence": { "ra": 0.7123, "dec": 41.27, "state": "imaging", "target": "M31 halo in narrowband" }
 }
 ```
 
-Progress counts subs and seconds, whether they arrived alone or inside masters.
-It keeps accepted data apart from assigned frames, frames reported but not yet
-submitted, and uploads still in review. Only accepted data counts toward a goal.
+Star size and guiding are in arcseconds, never pixels. The sub lengths are the
+ones your darks are built for: work is dealt at those lengths. `presence` is
+optional and shows the group where you point; `GET /api/v1/presence` shows
+everybody.
 
-## Sharing files outside the API
+## 3. Find a project
 
-Some projects accept files shared through a service such as Google Drive. The
-project's requirements then include `external_delivery`, with instructions.
+```sh
+curl -H "Authorization: Bearer $TOKEN" $SERVER/api/v1/agent/projects
+```
 
-Share the file as told, then send the usual manifest with two extra fields on
-each artifact:
+Each open project comes with its region, goals in hours per filter, rules, the
+hours collected so far, and whether your rig can help, rule by rule:
+
+```json
+{ "name": "M51 in LRGB", "kind": "single", "goals": { "L": 20.0, "R": 5.0, "G": 5.0, "B": 5.0 },
+  "compatibility": { "ok": false,
+    "summary": "cannot contribute: 530 mm is longer than the 400 mm the project wants; can shoot L — but no R; no G; no B" } }
+```
+
+Show this to the operator before they spend a night on a project they cannot
+help.
+
+## 4. Join it
+
+```sh
+curl -X POST $SERVER/api/v1/agent/projects/$PROJECT/join \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"exposures": {"Ha": 300, "OIII": 300, "SII": 300, "L": 120}}'
+```
+
+The server checks the rules against your rig and hands back your share: the whole
+region tiled with your camera's field, at your own sub lengths. Joining is your
+consent, so the share arrives `accepted`. Joining again returns the same share.
+
+## 5. Ask what to shoot tonight
+
+Name the night, and say how bright tonight's Moon is at your site and how much of
+the dark hours it is up. The server cannot know where you are.
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" \
+  "$SERVER/api/v1/agent/task?night=2026-10-05&moon=0.12&moonUp=0.3"
+```
 
 ```json
 {
-  "delivery": "external",
-  "external": {
-    "provider": "google_drive",
-    "url": "https://drive.example/file/d/EXAMPLE_FILE_ID/view",
-    "shared_at": "2026-10-04T05:00:00Z"
-  }
+  "id": "000000000004", "projectName": "M31 halo in narrowband",
+  "state": "accepted", "version": 3, "kind": "mosaic",
+  "filters": [ { "filter": "H", "exposure": 300.0, "hours": 10.0 },
+               { "filter": "O", "exposure": 300.0, "hours": 10.0 } ],
+  "share": [0, 1, 2, 3, 4, 5],
+  "visit": { "seconds": 3300.0, "frames": { "O": 11 }, "filter": "O", "moon": 0.036 },
+  "assignedNight": "2026-10-05"
 }
 ```
 
-There is nothing to upload. Finalize as usual. A maintainer downloads the file,
-checks it against your hash and records the result. Assessment then proceeds as
-for uploaded files. [Example manifest](../examples/external-submission.json).
+That is one share from the reply, which lists all of yours. Tonight this rig
+shoots six of its nine cells (`share` indexes into `cells`), all in OIII, 11 subs
+of 300 s on each. The Moon is thin, so it is an OIII night; under a bright Moon
+the server would send H-alpha or SII, which shoot through moonlight.
+
+The list holds for the whole night: ask again and you get the same panels and
+the same `version`, however many frames other rigs send meanwhile. The first time
+you ask in the next night, it is dealt again, sending you where the stack is
+thinnest and where you have been least. A `version` you already have means
+nothing new.
+
+Filter names come back as one letter: `L`, `R`, `G`, `B`, `H`, `O`, `S`. Your
+"OIII" and the server's `O` are the same filter.
+
+## 6. Shoot
+
+Run the panels in order with your own sequencer. The list is advice: your
+software decides when and whether to slew, and your safety limits always win.
+Keep the share and panel number with each frame.
+
+## 7. Report what you shot
+
+Send one record per night, filter and panel, with the solved footprint and what
+you measured:
+
+```sh
+curl -X POST $SERVER/api/v1/agent/report \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d @examples/report.request.json
+```
+
+```json
+{ "project": "000000000002", "task": "000000000004", "night": "2026-10-05",
+  "panel": "0", "filterName": "OIII", "frames": 11, "seconds": 3300.0, "exposure": 300.0,
+  "footprint": { "ra": 7.649, "dec": 39.769, "width": 2.540, "height": 1.697, "rotation": 35.0 },
+  "scale": 1.463, "focalLength": 530.0, "hfr": 2.34, "guideRms": 0.58, "bandpass": 7.0 }
+```
+
+Each record gets a verdict, in order. A good night:
+
+```json
+{ "id": "000000000005", "accepted": true, "duplicate": false,
+  "verdict": { "accepted": true, "reasons": [], "unverified": [], "summary": "accepted" } }
+```
+
+A night with soft stars:
+
+```json
+{ "accepted": false, "reasons": [ "stars averaged 4.98\", project wants 3.5\" or better" ] }
+```
+
+Accepted nights add depth where their footprints lie, which steers everyone's
+next night. A measurement you did not send cannot pass a rule; it shows under
+`unverified`. Verdicts are advisory: a project's coordinator can overrule one.
+
+Send every panel you have not yet reported on each poll, and mark a panel
+reported only when the server has recorded it. Sending the same panel again is
+safe: the larger figure stands, and the reply says `duplicate`.
 
 ## Rules for every request
 
 | Rule | What to do |
 | --- | --- |
-| Base URL | Join every path to `api_root` from `/capabilities`. |
-| Credentials | Send `Authorization: Bearer <key>`. Never put a key in a URL or log. |
-| Bodies | Send and expect JSON, except upload parts, which are raw bytes. Servers reject unknown fields. |
-| Retries | Every request is safe to repeat as is. Creates use an `id` you choose, so a retry finds the record. |
-| `202 Accepted` | Work continues on the server. Read the resource again later. |
-| Lists | Pass `next_cursor` back as `cursor` until it is `null`. |
-
-Errors use [`application/problem+json`](https://www.rfc-editor.org/rfc/rfc9457.html).
-Act on `code`, not on the wording of `detail`. [Codes](codes.md) lists them all:
-
-```json
-{
-  "type": "https://collab.example/problems/terms-consent-required",
-  "title": "Terms consent required",
-  "status": 409,
-  "code": "terms_consent_required",
-  "detail": "Review the current project terms before finalizing.",
-  "request_id": "00000000-0000-4000-8000-000000000090"
-}
-```
+| Address | Paths start with `/api/v1` on the server's address. |
+| Tokens | `Authorization: Bearer <token>`. Never put a token in a URL or log. |
+| Bodies | JSON. Send numbers as numbers and unknown values as null. Keep or ignore fields you do not know. |
+| Retries | Every call is safe to repeat as is; see the [protocol](protocol.md#9-retries). |
+| Errors | `{"detail": ...}`. Act on the HTTP status; show `detail` to the operator. |
 
 | Status | Meaning | What to do |
 | --- | --- | --- |
-| `401` | The key is wrong, expired or revoked. | Ask the user for a new key. |
-| `403` | The account may not do this, for example it is not an active member. | Show the error; do not retry. |
-| `404` | Not found, or you may not see it. | Check the ID. |
-| `409` | State conflict, such as `upload_incomplete` or `id_conflict`. | Read the resource, then decide. |
-| `422` | The body is invalid. `errors` points at the bad fields. | Fix the data. |
-| `429` | Too many requests. | Wait `Retry-After` seconds. |
-| `503` | The server is busy or down. | Retry the same request later. |
+| `400` | Asked too early, such as joining before saying hello with the rig's optics. | Do what `detail` says first. |
+| `401` | Missing, unknown or revoked token. | Ask the person to sign in or pair again. |
+| `403` | Not yours to do. | Show the error; do not retry. |
+| `404` | No such thing, or not yours. | Check the ID. |
+| `409` | Conflicts with how things stand, such as a rig that cannot meet a project. | Show `detail`. |
+| `422` | The body does not match its type; `detail` lists the bad fields. | Fix the program. |
+| `503` | Not available here, such as sign-in on a server without it. | Use the other way in, or try later. |
 
 ## Next
 
-- [Authentication](authentication.md): pairing, API keys and what servers must build.
-- [Walkthrough](walkthrough.md): every example payload, in order.
-- [Protocol](protocol.md): the rules servers and clients must follow.
+- [REST reference](api.md): every route, its body, replies and examples.
+- [Authentication](authentication.md): signing in, enrolling and pairing.
+- [Protocol](protocol.md): the rules servers and programs follow.
 - [Reference server](../reference/README.md) and
   [conformance tester](../conformance/README.md): run and test the API locally.

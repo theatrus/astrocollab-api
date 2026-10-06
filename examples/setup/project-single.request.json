@@ -1,0 +1,26 @@
+{
+  "name": "M51 in LRGB",
+  "kind": "single",
+  "region": {
+    "ra": 202.4696,
+    "dec": 47.1952,
+    "width": 0.25,
+    "height": 0.2
+  },
+  "goals": {
+    "L": 20,
+    "R": 5,
+    "G": 5,
+    "B": 5
+  },
+  "requirements": {
+    "filters": {
+      "L": null,
+      "R": null,
+      "G": null,
+      "B": null
+    },
+    "maxFocalLength": 400,
+    "maxHfr": 3.0
+  }
+}

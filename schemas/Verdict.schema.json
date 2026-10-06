@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Verdict.schema.json",
+  "title": "Verdict",
+  "type": "object",
+  "required": [
+    "accepted"
+  ],
+  "properties": {
+    "accepted": {
+      "type": "boolean"
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unverified": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "summary": {
+      "type": "string"
+    },
+    "overriddenBy": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "overrideReason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "description": "The server's judgement of one contribution. Advisory: a project's coordinator can overrule\nit. `unverified` lists rules that could not be checked because a measurement was missing."
+}

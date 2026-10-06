@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/SignedOut.schema.json",
+  "title": "SignedOut",
+  "type": "object",
+  "required": [
+    "signedOut"
+  ],
+  "properties": {
+    "signedOut": {
+      "type": "boolean"
+    }
+  }
+}

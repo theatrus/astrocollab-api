@@ -6,3 +6,4 @@ Thumbs.db
 _site/
 node_modules/
 typespec/tsp-output/
+starfront/

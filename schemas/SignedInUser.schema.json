@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/SignedInUser.schema.json",
+  "title": "SignedInUser",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "admin",
+    "canStart"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "avatar": {
+      "type": "string"
+    },
+    "admin": {
+      "type": "boolean"
+    },
+    "canStart": {
+      "type": "boolean",
+      "description": "May start projects on this server."
+    }
+  }
+}

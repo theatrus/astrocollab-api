@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/AuthStatus.schema.json",
+  "title": "AuthStatus",
+  "type": "object",
+  "required": [
+    "discord"
+  ],
+  "properties": {
+    "discord": {
+      "type": "boolean",
+      "description": "True when sign-in is on. Starfront servers sign people in with Discord."
+    },
+    "guild": {
+      "type": "string",
+      "description": "The community people must belong to, if any."
+    },
+    "roleRequired": {
+      "type": "boolean",
+      "description": "Starting projects needs a role."
+    },
+    "publicUrl": {
+      "type": "string"
+    }
+  },
+  "description": "Whether people can sign in here."
+}

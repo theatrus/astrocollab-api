@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/LoginStarted.schema.json",
+  "title": "LoginStarted",
+  "type": "object",
+  "required": [
+    "code",
+    "url",
+    "expiresIn"
+  ],
+  "properties": {
+    "code": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string",
+      "description": "Open this in the browser."
+    },
+    "expiresIn": {
+      "type": "integer",
+      "format": "int32",
+      "description": "Seconds the code stays good."
+    }
+  },
+  "description": "A sign-in in progress: a code for the program to hold, and a page for the person to open."
+}

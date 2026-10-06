@@ -2,8 +2,8 @@
 
 Run `npm ci` in typespec/ first. The script compiles TypeSpec, then writes:
 
-- openapi/astrocollab.yaml, with every object schema closed (servers reject
-  unknown fields) and examples taken from examples/manifest.json;
+- openapi/astrocollab.yaml, with examples taken from examples/manifest.json.
+  Objects stay open: a receiver keeps or ignores fields it does not know;
 - schemas/*.schema.json, standalone JSON Schemas for every type;
 - spec/api.md, a Markdown REST reference.
 
@@ -27,26 +27,6 @@ TARGET = ROOT / "openapi/astrocollab.yaml"
 SCHEMAS = ROOT / "schemas"
 REFERENCE = ROOT / "spec/api.md"
 HEADER = "# Generated from typespec/ by tools/build_openapi.py. Do not edit.\n"
-PROBLEM_EXAMPLES = {
-    "default": "invalid-request.json",
-    "409": "id-conflict.json",
-    "429": "rate-limited.json",
-}
-# Operations whose typical conflict differs from the default.
-CONFLICT_EXAMPLES = {"putUploadPart": "part-conflict.json", "finalizeSubmission": "terms-consent-required.json"}
-
-
-def close_objects(node: object) -> None:
-    if isinstance(node, dict):
-        if node.get("type") == "object" and "properties" in node:
-            node.setdefault("additionalProperties", False)
-        for value in node.values():
-            close_objects(value)
-    elif isinstance(node, list):
-        for value in node:
-            close_objects(value)
-
-
 def add_examples(doc: dict) -> None:
     examples = ROOT / "examples"
     manifest = json.loads((examples / "manifest.json").read_text(encoding="utf-8"))
@@ -57,7 +37,7 @@ def add_examples(doc: dict) -> None:
         if method in ("get", "put", "post", "delete", "patch")
     }
     for entry in manifest:
-        if "operationId" not in entry:
+        if "operationId" not in entry or entry["direction"] == "query":
             continue
         op = operations[entry["operationId"]]
         value = json.loads((examples / entry["file"]).read_text(encoding="utf-8"))
@@ -67,21 +47,6 @@ def add_examples(doc: dict) -> None:
         else:
             media = op["responses"][str(entry["status"])]["content"]["application/json"]
         media["examples"] = {"example": {"value": value}}
-    for op in operations.values():
-        # A repeated create returns the existing record with 200; reuse the 201 example.
-        created = op["responses"].get("201", {}).get("content", {}).get("application/json")
-        repeated = op["responses"].get("200", {}).get("content", {}).get("application/json")
-        if created and repeated and "examples" not in repeated and "examples" in created:
-            repeated["examples"] = created["examples"]
-    for oid, op in operations.items():
-        for status, response in op["responses"].items():
-            media = response.get("content", {}).get("application/problem+json")
-            if media is None:
-                continue
-            name = PROBLEM_EXAMPLES.get(status, PROBLEM_EXAMPLES["default"])
-            if status == "409":
-                name = CONFLICT_EXAMPLES.get(oid, name)
-            media["example"] = json.loads((examples / name).read_text(encoding="utf-8"))
 
 
 def build() -> dict[Path, str]:
@@ -89,9 +54,6 @@ def build() -> dict[Path, str]:
     subprocess.run(["npx", "--no-install", "tsp", "compile", "."], cwd=TYPESPEC, check=True,
                    stdout=subprocess.DEVNULL)
     doc = yaml.safe_load(EMITTED.read_text(encoding="utf-8"))
-    close_objects(doc["components"]["schemas"])
-    for item in doc["paths"].values():
-        close_objects(item)
     add_examples(doc)
     outputs = {TARGET: HEADER + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True, width=100)}
     outputs.update({SCHEMAS / name: text for name, text in json_schemas(doc).items()})

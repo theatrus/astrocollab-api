@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Contribution.schema.json",
+  "title": "Contribution",
+  "type": "object",
+  "properties": {
+    "project": {
+      "anyOf": [
+        {
+          "$ref": "Id.schema.json"
+        },
+        {
+          "type": "string",
+          "enum": [
+            ""
+          ]
+        }
+      ]
+    },
+    "task": {
+      "anyOf": [
+        {
+          "$ref": "Id.schema.json"
+        },
+        {
+          "type": "string",
+          "enum": [
+            ""
+          ]
+        }
+      ]
+    },
+    "night": {
+      "$ref": "NightName.schema.json"
+    },
+    "filterName": {
+      "type": "string"
+    },
+    "panel": {
+      "type": "string",
+      "description": "Which panel of the rig's tiling, as the rig numbers them; empty for a single frame."
+    },
+    "frames": {
+      "type": "integer",
+      "format": "int32",
+      "default": 0
+    },
+    "seconds": {
+      "type": "number",
+      "format": "double",
+      "description": "Total exposure, seconds.",
+      "default": 0
+    },
+    "exposure": {
+      "type": "number",
+      "format": "double",
+      "description": "Sub length, seconds.",
+      "default": 0
+    },
+    "footprint": {
+      "anyOf": [
+        {
+          "$ref": "Region.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "scale": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Arcseconds per pixel."
+    },
+    "focalLength": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Millimetres."
+    },
+    "hfr": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Mean star size over the night, arcseconds."
+    },
+    "guideRms": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Mean guiding error over the night, arcseconds."
+    },
+    "moonIllumination": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "0–1."
+    },
+    "moonSeparation": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Degrees."
+    },
+    "calibrated": {
+      "type": "boolean",
+      "default": false
+    },
+    "bandpass": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Bandpass of the filter used, nanometres."
+    },
+    "colour": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "description": "One night's work on one filter and one panel, as measured rather than as planned. The\nfootprint is the solved one: where the telescope really pointed."
+}

@@ -12,50 +12,21 @@ from pathlib import Path
 SCHEMA_BASE = "https://astrocollabapi.com/schemas/"
 METHODS = ("get", "put", "patch", "post", "delete")
 TAG_TITLES = {
-    "capabilities": "Discovery",
-    "pairing": "Pairing",
-    "projects": "Projects",
-    "rigs": "Rigs and assignments",
-    "submissions": "Submissions and uploads",
+    "discovery": "Discovery",
+    "signin": "Signing in",
+    "telescopes": "Telescopes and their tokens",
+    "telescope": "The telescope's night",
 }
-STATUS_TEXT = {
-    "200": "OK", "201": "Created", "202": "Accepted", "409": "Conflict",
-    "429": "Too many requests", "default": "Error",
-}
+STATUS_TEXT = {"200": "OK", "401": "Unauthorized", "409": "Conflict", "422": "Invalid"}
 INLINE_EXAMPLE_LINES = 30
-# Error codes each route can return, beyond 401, 429 and 5xx. See spec/codes.md.
-ROUTE_CODES = {
-    "pairClient": ["invalid_pairing_code", "invalid_request"],
-    "listMyProjects": ["invalid_cursor", "invalid_limit"],
-    "getProject": ["not_found"],
-    "getProgress": ["not_found"],
-    "registerEquipment": ["invalid_request", "invalid_range"],
-    "updateEquipment": ["not_found", "invalid_request", "invalid_range"],
-    "getEquipment": ["not_found"],
-    "listEquipment": ["invalid_cursor", "invalid_limit"],
-    "checkIn": ["not_found", "invalid_reference", "membership_inactive"],
-    "createSubmission": [
-        "membership_inactive", "id_conflict", "submission_deadline_passed", "payload_too_large",
-        "too_many_artifacts", "artifact_too_large", "invalid_request", "invalid_reference",
-        "invalid_revision", "duplicate_id", "invalid_supersede", "capture_deadline_passed",
-        "deliverable_mismatch", "too_few_subs", "invalid_stack", "drizzle_not_allowed",
-        "external_delivery_not_accepted",
-    ],
-    "putUploadPart": [
-        "not_found", "part_conflict", "upload_expired", "upload_finalized", "invalid_part_number",
-        "part_size_mismatch", "digest_mismatch",
-    ],
-    "getUpload": ["not_found"],
-    "finalizeSubmission": [
-        "not_found", "upload_incomplete", "terms_consent_required", "submission_deadline_passed",
-    ],
-    "getSubmission": ["not_found"],
-}
-# The order a client calls them in.
+#: Routes that take a person's token from sign-in. Every other private route takes a
+#: telescope's agent token.
+PERSON_ROUTES = {"authMe", "authLogout", "enrolTelescope", "listTelescopes"}
+# The order a program calls them in.
 OP_ORDER = [
-    "getCapabilities", "pairClient", "listMyProjects", "getProject", "getProgress",
-    "registerEquipment", "updateEquipment", "getEquipment", "listEquipment", "checkIn",
-    "createSubmission", "putUploadPart", "getUpload", "finalizeSubmission", "getSubmission",
+    "health", "authStatus", "authLogin", "authPoll", "authMe", "authLogout",
+    "enrolTelescope", "listTelescopes", "pairTelescope",
+    "hello", "openProjects", "joinProject", "tonight", "setTaskState", "report", "presence",
 ]
 
 
@@ -112,13 +83,13 @@ def _schema_link(schema: dict) -> str:
     return f"`{schema.get('format', kind)}`" if kind == "string" else f"`{kind}`"
 
 
-def _key_rule(op: dict, doc: dict) -> str:
+def _token_rule(op: dict, doc: dict) -> str:
     security = op.get("security", doc.get("security", []))
-    open_ = any(not entry for entry in security)
-    keyed = any(entry for entry in security)
-    if keyed and open_:
-        return "Optional. Public projects can be read without a key."
-    return "Required." if keyed else "None."
+    if not any(entry for entry in security):
+        return "None."
+    if op["operationId"] in PERSON_ROUTES:
+        return "A person's token, from signing in."
+    return "The telescope's agent token."
 
 
 def _param_rows(op: dict, doc: dict) -> list[str]:
@@ -138,12 +109,12 @@ def _param_rows(op: dict, doc: dict) -> list[str]:
     return rows
 
 
-def _example(path: Path, title: str) -> list[str]:
-    text = path.read_text(encoding="utf-8")
-    link = f"[{title}](../examples/{path.name})"
+def _example(examples: Path, name: str, title: str) -> list[str]:
+    text = (examples / name).read_text(encoding="utf-8")
+    link = f"[{title}](../examples/{name})"
     if text.count("\n") > INLINE_EXAMPLE_LINES:
         return [f"Example: {link}.", ""]
-    return [f"{title} ([file](../examples/{path.name})):", "", "```json", text.rstrip(), "```", ""]
+    return [f"{title} ([file](../examples/{name})):", "", "```json", text.rstrip(), "```", ""]
 
 
 def rest_reference(doc: dict, examples: Path) -> str:
@@ -158,14 +129,16 @@ def rest_reference(doc: dict, examples: Path) -> str:
         "",
         "<!-- Generated from openapi/astrocollab.yaml by tools/build_openapi.py. Do not edit. -->",
         "",
-        f"Version {doc['info']['version']}. Paths are relative to the API root from "
-        f"`GET /capabilities`, for example `{server}`.",
+        f"Version {doc['info']['version']}. Paths are relative to the server's address, "
+        f"for example `{server}`.",
         "",
-        "Send `Authorization: Bearer <api key>` where a key is required. Bodies are JSON",
-        "unless stated. Errors use `application/problem+json`; act on `code`. Every type",
-        "links to a standalone [JSON Schema](../schemas/index.json), so you can validate",
-        "payloads without OpenAPI tools. The [protocol](protocol.md) gives the rules",
-        "behind each route, and [codes](codes.md) lists every error code and reason.",
+        "Send `Authorization: Bearer <token>` where a token is needed: a telescope's agent",
+        "token on telescope routes, a person's token on account routes. Bodies are JSON.",
+        "Errors are `{\"detail\": ...}`: words for the operator on most errors, a list of",
+        "bad fields on `422`. Objects are open: keep or ignore fields you do not know. Every",
+        "type links to a standalone [JSON Schema](../schemas/index.json), so you can",
+        "validate payloads without OpenAPI tools. The [protocol](protocol.md) gives the",
+        "rules behind each route.",
         "",
         "| Method | Path | Purpose |",
         "| --- | --- | --- |",
@@ -183,7 +156,7 @@ def rest_reference(doc: dict, examples: Path) -> str:
             current = tag
             lines += [f"## {TAG_TITLES.get(tag, tag)}", ""]
         lines += [f'<a id="{op["operationId"].lower()}"></a>', "", f"### {op['summary']}", "",
-                  f"`{method.upper()} {path}`", "", f"API key: {_key_rule(op, doc)}", ""]
+                  f"`{method.upper()} {path}`", "", f"Token: {_token_rule(op, doc)}", ""]
         if op.get("description"):
             lines += [" ".join(op["description"].split()), ""]
         params = _param_rows(op, doc)
@@ -200,10 +173,8 @@ def rest_reference(doc: dict, examples: Path) -> str:
             meaning = " ".join(response.get("description", STATUS_TEXT.get(status, "")).split())
             lines.append(f"| `{status}` | {body_text} | {meaning} |")
         lines.append("")
-        codes = ROUTE_CODES.get(op["operationId"])
-        if codes:
-            lines += ["Error codes: " + ", ".join(f"[`{c}`](codes.md)" for c in codes) + ".", ""]
         for entry in by_op.get(op["operationId"], []):
-            title = "Request" if entry["direction"] == "request" else f"Response `{entry['status']}`"
-            lines += _example(examples / entry["file"], title)
+            title = {"request": "Request", "query": "Query"}.get(
+                entry["direction"], f"Response `{entry.get('status')}`")
+            lines += _example(examples, entry["file"], title)
     return "\n".join(lines).rstrip() + "\n"

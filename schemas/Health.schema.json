@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Health.schema.json",
+  "title": "Health",
+  "type": "object",
+  "required": [
+    "ok",
+    "protocol",
+    "time",
+    "version"
+  ],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "protocol": {
+      "type": "integer",
+      "format": "int32",
+      "description": "Protocol version, an integer. This draft is protocol 1."
+    },
+    "time": {
+      "$ref": "UnixTime.schema.json"
+    },
+    "version": {
+      "type": "string",
+      "description": "The server's own build version."
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Optional parts this server offers, such as `signin`, `pairing` or `files`."
+    }
+  },
+  "description": "Whether the server is up, which protocol it speaks, and what it offers."
+}

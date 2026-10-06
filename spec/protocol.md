@@ -1,337 +1,304 @@
 # AstroCollab protocol
 
-Version: 0.1.0-draft.1. Draft specification.
+Version: 0.2.0-draft.1. Draft specification.
 
 MUST and MUST NOT mark requirements. SHOULD marks a recommendation; MAY marks
-an option. The [OpenAPI contract](../openapi/astrocollab.yaml) defines payload
-structure. This document defines the behavior that schemas cannot check.
+an option. The [OpenAPI contract](../openapi/astrocollab.yaml) and the
+[JSON Schemas](../schemas/index.json) define payloads. This document defines the
+behaviour they cannot.
+
+This version adopts the protocol that [Starfront](https://github.com/bray-sfro/starfront)
+already speaks, with its paths unchanged. Starfront's capture app and
+collaboration server are its first implementation.
 
 ## 1. What the API covers
 
-A project describes one picture that many contributors build together. The API
-is what a contributor's client calls: pair a rig, describe it, ask what to
-image, and send the results. It has 15 operations.
+A project is one image that many astrophotographers build together: a region of
+sky, the depth wanted in each filter, and the rules data must meet. The API is
+what a telescope's software calls to take part:
 
-Everything else belongs to the server and its own tools: signup, joining
-projects, setting requirements, reviewing members, assessing data by hand,
-moderation and billing. This protocol says how the server must behave toward
-contributors, not how owners run it.
+1. Get a telescope token, by signing a person in and enrolling the telescope, or
+   by pairing.
+2. Say hello: describe the rig.
+3. Browse open projects and join one.
+4. Ask what to shoot tonight.
+5. Report what was shot, and hear whether it counts.
 
-The server never controls equipment and never reserves a target. The client's
-own software decides when and whether to point a rig.
+Running projects belongs to each server and its own tools: starting and editing
+projects, pushing work to a telescope by hand, overruling verdicts. This protocol
+says how a server behaves toward telescopes, not how coordinators run it.
+
+The telescope always asks; the server never reaches into an observatory. So a
+rig behind a home router works, and a server going down means "no new work",
+not "the night stops". The server never moves a mount, and never reserves sky.
 
 ## 2. Conventions
 
-Clients start from an API root and call public `GET /capabilities`. It gives the
-server ID, API root, account pages (`account_url`), supported versions, optional
-features and limits. Routes are relative to the API root. Servers use HTTPS;
-`http://` is allowed only on loopback addresses, for local development.
+**Paths.** Routes live under `/api/v1` on the server's address.
+`GET /api/v1/health` is public and gives the protocol version, an integer (this
+draft is protocol 1), and, optionally, `features`: the optional parts the server
+offers, such as `signin`, `pairing` or `files`.
 
-Resources have opaque UUIDs. A capture is identified by `(origin_id,
-capture_id)`: the producer picks a persistent origin UUID, and the client keeps
-both IDs when it submits, recalibrates or stacks the capture. Hashes detect
-identical bytes; they do not prove who made them.
+**Bodies.** Requests and responses are JSON. Objects are open: a receiver keeps
+or ignores fields it does not know, so a newer program is never refused for
+sending one field more. Senders send numbers as numbers and unknown values as
+null. Receivers SHOULD read a blank or unreadable number as unknown rather than
+refuse the request, as Starfront does.
 
-| Quantity | Convention |
+**Identifiers** are 12 lowercase hexadecimal characters, made by the server.
+**Times** are seconds since 1970 UTC, as numbers. A **night** is named by the
+rig, such as `2026-10-05`.
+
+**Units.**
+
+| Quantity | Unit |
 | --- | --- |
-| Coordinates | ICRS; RA in degrees [0, 360), Dec in degrees [-90, 90]. |
-| Footprint | Tangent-plane rectangle centered on the stated coordinates; width and height in degrees. At position angle zero, width runs east-west and height north-south. |
-| Position angle | Degrees east of celestial north, measured along the height axis. |
-| Sampling | Arcseconds per pixel. |
-| Wavelength | Nanometers. |
-| Focal length / pixel size | Millimeters / micrometers. |
-| Duration / size | Seconds / bytes. |
-| Timestamp | RFC 3339 UTC with `Z`. |
+| Region and footprint centres | Degrees of RA and declination. RA is degrees, not hours. |
+| Region width and height | Degrees of sky, not degrees of the RA coordinate. |
+| Presence RA | Hours, as the rig's own chart shows it. |
+| Star size (HFR) and guiding error | Arcseconds, never pixels. |
+| Image scale | Arcseconds per pixel. |
+| Focal length, pixel size | Millimetres, microns (unbinned). |
+| Bandpass | Nanometres, full width. |
+| Sub length, integration | Seconds. Depth goals are hours. |
+| Moon illumination | 0 to 1. |
 
-Bodies are JSON, except upload parts, which are raw bytes. Omit unknown values
-rather than sending zero. Servers reject unknown request fields; clients ignore
-unknown response fields. Lists take an opaque `cursor` and `limit` (1–100,
-default 50) and return `next_cursor`, `null` on the last page.
+**Filter names.** Every filter name is folded to one letter wherever it enters:
 
-Errors use [`application/problem+json`](https://www.rfc-editor.org/rfc/rfc9457.html)
-with a stable `code`, the HTTP `status`, a short `detail`, a request ID and, for
-invalid input, field `errors`. Clients act on `code`. [Codes](codes.md) lists
-every error code, check-in `wait` reason and file rejection reason.
+| Letter | Filter | Also written as |
+| --- | --- | --- |
+| `L` | Luminance | Lum, Luminance, Clear, UV/IR cut, None |
+| `R`, `G`, `B` | Red, green, blue | Red, Green, Blue |
+| `H` | Hydrogen-alpha | Ha, H-alpha, Halpha, Ha 3nm |
+| `O` | Oxygen III | OIII, O3, Oxygen |
+| `S` | Sulphur II | SII, S2, Sulphur |
 
-| Status | Meaning |
-| --- | --- |
-| `401` | Missing, unknown, expired or revoked key. |
-| `403` | The account may not do this, for example it is not an active member. |
-| `404` | Not found, or not visible to this account. |
-| `409` | Conflict with current state, such as `id_conflict` or `upload_incomplete`. |
-| `413` | Input exceeds a size limit. |
-| `422` | Invalid or incompatible data. |
-| `429` | Too many requests; wait `Retry-After` seconds. |
-| `503` | Temporarily unavailable; retry later. |
+Case, spaces, hyphens and a trailing bandpass ("Ha 3nm") do not matter. A name
+that is none of these, such as a dual-band filter, is kept as written. Servers
+MUST compare filters by these letters.
 
-Servers limit JSON size, part size, decoded pixels, storage and compute, and
-check actual input, not declared sizes. They reject client paths, executable
-metadata and requests to fetch arbitrary URLs.
+**Errors** are `{"detail": ...}`. On most errors `detail` is a sentence to show
+the operator. On `422`, `detail` lists each bad field. Clients act on the HTTP
+status:
 
-## 3. Pairing and API keys
+| Status | Meaning | What to do |
+| --- | --- | --- |
+| `400` | The request cannot be served as asked, such as joining before describing the rig. | Do what `detail` says first. |
+| `401` | Missing, unknown or revoked token. | Stop and ask the person to sign in or pair again. |
+| `403` | Not this caller's to do. | Show `detail`; do not retry. |
+| `404` | No such thing, or not this caller's. | Check the ID. |
+| `409` | Conflicts with how things stand, such as a rig that cannot meet a project, or a newer protocol. | Show `detail`. |
+| `422` | The body does not match its type. | Fix the program. |
+| `503` | Not available here, such as sign-in on a server without it. | Use the other way, or try later. |
 
-Every private request carries `Authorization: Bearer <api key>`. Each client
-installation gets its own key by pairing:
+## 3. Tokens
 
-1. On the server's web pages, the user issues a pairing code. The user may limit
-   the key to some projects, set an expiry, or issue the code for a rig already
-   set up on the web.
-2. The user enters the code in the client.
-3. The client calls `POST /pair` with the code, a persistent `installation_id`
-   and a `client_name`. It sends no `Authorization` header.
-4. The server returns the key once, with `Cache-Control: no-store`, and the rig's
-   `equipment_id` when the code was issued for a rig.
+There are two kinds of token, and neither can do the other's job:
 
-A code works once and expires within one hour. The server consumes the code and
-creates the key in one transaction. Pairing again with the same
-`installation_id` revokes that installation's old key. An unknown, used or
-expired code returns `401 invalid_pairing_code`; repeated failures return `429`.
-Clients MUST NOT retry pairing on their own. If the response is lost, the user
-issues a new code and revokes the orphan key. Servers MAY also let users copy a
-key from the web pages; every server MUST support pairing.
+- A **person token** belongs to somebody signed in. It enrols and lists that
+  person's telescopes. It cannot fetch work or report frames.
+- A **telescope token** (agent token) belongs to one telescope. It says hello,
+  fetches work and reports frames, and nothing else. It never changes a project.
 
-A key acts for its account, limited to its projects if the user chose some.
-Servers store only hashes of codes and keys, each with at least 128 bits of
-randomness, and let users list and revoke keys. They check the key and the
-account's membership on every request.
+Both travel as `Authorization: Bearer <token>`.
 
-Clients store keys in the system credential store and send them only in the
-`Authorization` header, over HTTPS, to the server's own origin. Keys never go in
-URLs, manifests or logs.
+A telescope gets its token one of two ways. A server MUST offer at least one, and
+SHOULD list which in `features`. A server that sends no `features` offers sign-in
+when `GET /api/v1/auth` says so; programs treat pairing as offered only when
+`features` lists it.
 
-## 4. Projects and membership
+**Sign in, then enrol** (`signin`). The device flow, because capture software is
+a desktop program:
 
-Users join projects on the server's web pages, where they accept the project's
-terms. `GET /me/projects` lists the projects the account has joined, with its
-membership state. Only `active` members receive assignments and submit data.
-When a client learns that membership is no longer active, it stops starting new
-work for that project.
+1. The program calls `POST /api/v1/auth/login` and gets a `code` and a `url`.
+2. It opens `url` in the browser. The person signs in there, with whatever the
+   server uses; Starfront servers use Discord.
+3. The program polls `GET /api/v1/auth/poll?code=...` until `state` is `done`,
+   which hands over the person's token once.
+4. With the person token, the program enrols each telescope with
+   `POST /api/v1/agents` and gets that telescope's token, shown once.
 
-`GET /projects/{id}` returns the project's current requirements and their
-`revision`, which rises whenever the owners publish changes. Submissions name the
-revision their frames were taken for. A later revision MUST NOT change how data
-taken for an earlier one is judged.
+`GET /api/v1/auth` says whether sign-in is on. `GET /api/v1/auth/me` and
+`POST /api/v1/auth/logout` do what they say. A server MAY sign a person out
+elsewhere when they sign in on a second machine.
 
-Requirements contain:
+**Pairing** (`pairing`). The person issues a single-use code on the server's web
+pages and types it into the program, which calls `POST /api/v1/pair` with the
+code and a name for the telescope. It gets the same reply as enrolling. A code
+works once and expires within an hour; repeated bad codes MAY get `429`.
+Programs MUST NOT retry pairing on their own; if the reply is lost, the person
+issues a new code.
 
-- **Targets:** each with a footprint on the sky.
-- **Objectives:** for a target, the accepted passbands, exposure range,
-  processing group, minimum coverage, quality rules and goal. The goal, in frames,
-  seconds of integration or both, is the depth every part of the target needs.
-- **Processing groups:** sampling range, color state and calibration steps.
-- **Terms, deadlines and `deliverable`:** `calibrated_subs` (each calibrated
-  exposure as its own file) or `stacked_masters` (masters the contributor stacks,
-  with `master_rules`).
-- **`external_delivery`**, when the project accepts files shared outside the API.
+Programs keep tokens in the system credential store and send them only in the
+`Authorization` header, over HTTPS, to the server's own origin. Servers SHOULD
+store only hashes of tokens and SHOULD let people revoke a telescope.
 
-Captures must start before `capture_deadline`; submissions must be finalized
-before `submission_deadline`. Both bounds are exclusive.
+## 4. Hello
 
-## 5. Rigs
+A telescope says what it is with `POST /api/v1/agent/hello`, before asking for
+work and whenever the rig changes. The hello is also its heartbeat: a telescope
+counts as online for 25 minutes after its last call.
 
-A rig belongs to the account and serves every project it joins. The user may set
-it up on the web, the client may register it with `PUT /me/equipment/{id}`, or
-both. `PATCH` with a JSON merge patch changes only the fields sent, so a rig can
-report its focal length without erasing filters entered on the web.
+The rig profile gives:
 
-Only the name is required. To plan for a rig, the server needs the unbinned
-sensor size, pixel size, focal length, color state and at least one filter.
-Optional fields include binning, camera and telescope names, rotation and an
-approximate site. Field of view depends on sensor size, pixel size and focal
-length; sampling also depends on binning.
+- **Optics and sensor:** focal length, pixel size, unbinned sensor size,
+  binning. From these the server works out image scale and field of view.
+- **Filters:** each name with its bandpass, or null where it is not known.
+- **Colour:** a one-shot colour camera is broadband RGB, whatever is in front of
+  it.
+- **Rotation:** the camera's fixed position angle, or null when a rotator can
+  set any angle. A fixed camera's tiling follows its real angle.
+- **What it achieves:** typical star size and guiding error, in arcseconds.
+- **Sub length per filter:** what its darks are built for. Work is dealt at these
+  lengths, so every frame can be calibrated.
+- **Time:** hours per night it gives, and its local window, such as 21:00 to
+  03:00.
 
-Each filter has a stable ID and a list of passbands, each with a name, center
-wavelength and, when known, width. A narrowband or luminance filter has one
-passband; a dual-narrowband filter on a color camera has two. Filters may also
-give their kind, maker and model.
+A hello MAY carry **presence**: where the telescope points and what it is doing.
+`GET /api/v1/presence` shows every telescope seen in the last day, with what it
+chose to share, so the group can see who is on the sky.
 
-A changed description creates a new revision; an identical one does not. Servers
-keep every revision that an assignment or submission cites.
+A hello whose `protocol` is newer than the server's gets `409`.
 
-## 6. Assignments
+## 5. Projects
 
-### Asking for work
+A project is a **region** of sky, of one of two kinds:
 
-A rig asks what to image with `POST /me/checkins`, naming its equipment ID. It
-may limit the choice to some projects and name the assignment it is working on.
-The server answers with one of three actions:
+- **`mosaic`:** an area to cover. Each telescope tiles the whole region with its
+  own camera, so telescopes with different fields need not agree on a grid. Each
+  cell MUST fit the rig's field at the angle it shoots, and the cells SHOULD
+  cover the region; the exact layout is the server's choice.
+- **`single`:** one object. Every telescope frames it whole, at whatever field it
+  has; nobody tiles it.
 
-| Action | Meaning |
-| --- | --- |
-| `image` | `assignment` holds new work. Start it at a safe point. |
-| `continue` | Keep working on the current assignment. |
-| `wait` | Nothing suits this rig now. `reason_codes` say why; see [codes](codes.md#check-in-wait-reasons). |
+Its **goals** are depth wanted at every point of the region, per filter, in
+hours. Depth is integration time at a point on the sky, which means the same on
+a 300 mm refractor and a 2000 mm reflector. Its **requirements** are the rules
+data must meet: focal length or scale, colour cameras allowed or not, star size
+and guiding, sub length, filters with the widest bandpass accepted, Moon
+illumination and separation, lowest altitude, calibration, and the fewest frames
+a visit to one panel is worth.
 
-Each answer gives `next_checkin_seconds`. The server decides; there is no
-proposal for the client to accept or reject. A repeated check-in creates nothing
-new.
+`GET /api/v1/agent/projects` lists every open project with whether this
+telescope can help, checked against the profile it last sent, rule by rule.
+Programs SHOULD show the operator why a rig cannot help before a night is spent
+on it. Each listing also shows the accepted hours so far and who is taking part.
 
-### Reporting progress before upload
+`POST /api/v1/agent/projects/{id}/join` takes a share. A rig that has not said
+hello with its focal length, sensor size and pixel size gets `400`: the server
+cannot cut cells without them. Otherwise the server checks the requirements
+against the rig's profile itself and against its sub lengths, and answers `409`
+with the reason if they are not met. A rig must carry every filter the project
+wants, within its bandpass limits. The share is the whole region tiled with this
+rig's camera, at its own sub lengths. Joining is consent: the share arrives
+`accepted`. Joining twice returns the share already held.
 
-A rig may capture for days before it submits, and in a masters project subs wait
-until there are enough to stack. A check-in reports this with
-`unsubmitted_captures`: for each panel, the frames and integration captured but
-not yet submitted, and when the last one was taken. Each report is a total that
-replaces the rig's previous one, so repeating it changes nothing. A rig sends
-`[]` once everything is submitted.
+## 6. Tonight
 
-The server counts reported frames when it hands out panels, so it does not send
-more rigs to a panel whose data is already on its way, and shows them in
-progress as `reported_frames`. Reported frames earn no credit; only submitted,
-accepted data does. How long a report counts without a submission is up to each
-server.
+`GET /api/v1/agent/task` returns every share the telescope holds, each dealt for
+tonight:
 
-### How the server assigns work
+- `cells`: the rig's tiling of the region.
+- `share`: which cells to shoot tonight, in order.
+- `visit`: tonight's filter and frames per panel.
+- `version`: rises whenever the share changes. A version the program already has
+  means nothing new.
 
-The server picks the project and panel where the rig adds most, using what the
-rig advertises:
+The program says which night it is in with `night`, and describes its own sky
+with `moon` (how much of the Moon is lit) and `moonUp` (the fraction of its dark
+hours the Moon is up). The server cannot know where a rig is, so the rig tells it.
 
-| Rig capability | Used for |
-| --- | --- |
-| Field of view | Panel size: whole targets for wide rigs, single panels for long ones. |
-| Sampling | Objectives whose sampling range the rig meets. |
-| Filters and passbands | Objectives the rig can serve. A dual-band filter can serve two objectives in the same frames. |
-| Color state | Objectives whose processing group accepts mono or color data. |
-| Rotation and angle | Panel angle: fixed cameras keep their angle. |
-| Site, when given | Targets that rise high enough there. |
+Rules for dealing a night:
 
-A filter serves an objective when one of its passbands matches one of the
-objective's accepted passbands: its center lies inside the accepted band and,
-when both widths are known, its width is between a quarter of the accepted width
-and the full accepted width. When the accepted band gives no width, centers must
-agree within 5 nm. So a 3 nm H-alpha filter serves a 7 nm H-alpha objective, but
-a narrowband filter does not serve a 300 nm luminance objective.
+- A list MUST hold for the whole night it was dealt for. Other rigs' frames
+  arriving at 2 a.m. must not move panels under a rig that is shooting them. The
+  list is dealt afresh the first time the rig asks in the next night. A rig that
+  never names its night gets a list held for 20 hours. A server MAY deal a list
+  again within the night once, when the rig first reports its Moon, or when the
+  hours it gives that night change by more than 15%.
+- A visit to a panel MUST NOT be shorter than the project's `minFramesPerVisit`
+  in any filter, because a rig stacks its own frames first.
+- On a mosaic, a rig SHOULD shoot one filter a night: every panel gets a stack in
+  that filter, the wheel never turns between panels, and one set of flats
+  serves the night.
+- Which filter: under a bright Moon, the red narrowband lines (H, S), which shoot
+  through moonlight; on a dark night, what cannot be shot any other time (L, R,
+  G, B, O). Among those, the filter with the most depth still wanted once what
+  other rigs are putting in tonight is counted.
+- Which panels, in this order: not where somebody else is tonight; where this rig
+  has been least, so no patch is one camera's alone; where the field is thinnest.
+  Panels already at full depth are skipped. The night holds as many visits as
+  fit.
 
-For a target larger than a rig's field, the server lays a grid of panels over it.
-Each panel needs the objective's full goal, and the objective is complete when
-every panel is. The server tracks depth per panel and hands each rig the panels
-that most need data, so no rig has to build a whole mosaic. Rigs with similar
-fields SHOULD share a grid, but a rig only gets panels that fit its own field.
-`Panel.layout` gives a panel's column and row.
+The reply also carries each project's requirements, so the program can judge its
+own data before reporting it.
 
-An assignment usually holds one panel. It may list a few, in order, when the
-first will be done before the night ends; the rig moves on when the current
-panel has its suggested frames. Each panel gives where to point, the filter, the
-exposure, the suggested frame count and the objectives it serves. Every panel
-MUST fit the rig's field, use one of its filters, and meet the objective's
-sampling and exposure rules.
+A share a coordinator pushed by hand arrives `offered` and stays so until the
+program accepts it with `POST /api/v1/agent/task/{id}`. That route also declines
+or finishes a share. Shares from joining need no answer.
 
-Assignments reserve nothing. Two rigs may get overlapping panels, and useful data
-from both counts. More data is always welcome: while a project is open, servers
-SHOULD keep assigning useful work rather than answer `wait`, even for a panel
-other rigs already hold or one that has met its goal. Data past a goal is
-surplus, credited to the contributor.
+Tonight's list is advice. The program and its operator decide when and whether
+to shoot it, and the rig's own safety limits always win.
 
-### Client duties
+## 7. Reports and credit
 
-Clients check each assignment against their own safety limits before use. They
-stop starting new frames for an assignment after its `expires_at`, never change
-an exposure already in progress, and keep the assignment and panel IDs with each
-capture.
+After shooting, the program reports with `POST /api/v1/agent/report`: one record
+per night, filter and panel. Each record gives frames, seconds and sub length,
+the panel's **solved** footprint (where the telescope really pointed), image
+scale, focal length, mean star size and guiding error over the night, Moon
+illumination and separation, whether the frames are calibrated, the filter's
+bandpass, and whether the camera is colour.
 
-## 7. Submissions
+The server judges each record against the project's rules and answers with a
+verdict per record:
 
-### Manifest
+- **Filter:** one the project wants, and no wider than its limit.
+- **Colour camera:** allowed, and under the colour Moon limit.
+- **Focal length and scale** within limits.
+- **Star size and guiding** within limits, in arcseconds.
+- **Sub length** within limits.
+- **Moon** illumination and separation within limits.
+- **Calibration**, when required.
 
-A submission is an immutable manifest for one project, with a client-chosen
-`id`, the project revision and up to 100 artifacts. An artifact is one file:
+A star-size, guiding or image-scale rule that cannot be checked because the
+measurement is missing is listed under `unverified`: a missing measurement is
+not a pass. Other rules are judged only on what the record gives. Verdicts are advisory: a
+project's coordinator can overrule one, with the server's own tools, because a
+night the numbers reject may be the only data anybody has on that patch of sky.
 
-- **Calibrated sub** (`kind: calibrated_sub`): one exposure, with its capture
-  identity, raw and calibrated hashes, rig revision, filter and passbands,
-  exposure, capture time, calibration history and measurements.
-- **Stacked master** (`kind: stacked_master`): a registered, linear master with a
-  `stack` block listing every sub in it by capture identity, time and hash, the
-  sub count and total integration, and how the subs were registered, normalized,
-  rejected and weighted. All subs share one exposure length.
+Accepted records build the project's depth map: each record adds its seconds,
+per filter, to the sky its footprint covers. That map drives the next night's
+dealing for every rig.
 
-Calibration history records each calibration frame's role and hash, the
-operations, parameters and software versions. Darks and flats are never sent.
-A `fresh_pixel_solve` must solve the submitted pixels; headers and predicted
-coordinates do not count.
+A record for the same telescope, share, night, filter and panel replaces the
+earlier one at the larger figure, so sending a report again never counts hours
+twice. Programs SHOULD send every unreported panel on each poll and mark a panel
+reported only when the server has recorded it.
 
-Servers reject an artifact whose kind does not match the project's
-`deliverable` with `422 deliverable_mismatch`. A master needs at least
-`master_rules.min_sub_count` subs (`422 too_few_subs`), a `sub_count` equal to
-its list and an integration equal to `sub_count` × `exposure_seconds`
-(`422 invalid_stack`), and `allow_drizzle` if drizzled
-(`422 drizzle_not_allowed`).
+## 8. Files (optional)
 
-### Upload
-
-Each artifact arrives one of two ways, for subs and masters alike:
-
-- **`upload`:** the server returns an upload session with a fixed part size. The
-  client sends `PUT /uploads/{id}/parts/{n}` with the raw bytes,
-  `Content-Length` and lowercase hex `X-Part-SHA256`. Parts are numbered from 1;
-  all but the last have exactly `part_size_bytes`. Parts may arrive in any order.
-  The server checks size and hash and records each part atomically: the same
-  bytes return the same receipt, different bytes for a received part return
-  `409 part_conflict`, and a bad hash returns `422 digest_mismatch` without
-  recording the part. `GET /uploads/{id}` lists received parts. Each accepted part
-  extends the session; an idle session expires after the staging period, and the
-  client then submits again under a new ID.
-- **`external`:** the file is shared outside the API, if the project's
-  `external_delivery` lists the provider (otherwise
-  `422 external_delivery_not_accepted`). The location gives the provider, an
-  HTTPS link and the share time. The link may point at a shared folder, with
-  `path` naming the file inside it. There is no upload session; the artifact
-  waits in `awaiting_retrieval` until the project fetches the file and checks its
-  hash. A server fetches files itself only over HTTPS from hosts it lists in
-  `external_retrieval_hosts`. Links may grant access: only the submitter and the
-  project's maintainers may see them.
-
-`POST /submissions/{id}/finalize` checks that every upload is complete
-(`409 upload_incomplete` otherwise) and starts assessment. It returns `202` with
-the submission in `processing`. Clients read `GET /submissions/{id}` until it is
-`complete`; each artifact then shows `accepted` or `rejected` with reason codes
-and the credit it earned. One bad file does not hold up the rest.
-
-At creation, part writes and finalization, servers check membership, current
-terms consent, deadlines and quota. If the terms changed, finalization returns
-`409 terms_consent_required` until the user accepts them on the web; staged
-bytes are kept.
-
-## 8. Assessment and credit
-
-The server assesses each artifact against the requirements of the revision it
-names: hashes, passbands, sampling, exposure, coverage of its panel, required
-evidence and quality rules. Missing required evidence fails; missing optional
-evidence does not. Only accepted artifacts earn credit. Maintainers may also
-assess by hand with the server's own tools, under the same rules.
-
-Credit counts subs and seconds of integration. An accepted sub credits one frame
-and its exposure; an accepted master credits its sub count and integration. A
-sub earns credit once per project, whether alone or inside a master: a master
-that repeats a credited sub is rejected with `duplicate_capture`. Assessment
-judges a master's pixels as a whole; the sub list is the contributor's claim.
-One frame may credit several objectives when its filter serves them all.
-
-To replace a file, submit a new artifact ID with `supersedes_artifact_id` and the
-same capture identity; acceptance replaces the old credit, rejection keeps it.
-Frames accepted after a panel's goal is met count as surplus: credited to the
-contributor, not to the goal.
-
-`GET /projects/{id}/progress` shows each objective's goal and its assigned,
-reported, pending, accepted, rejected and surplus frames, and whether every panel has the
-goal's depth. Only accepted data counts toward a goal.
+Core credit is the night report: the server judges the numbers a rig measured
+and keeps no images. A project that needs pixels can require files through an
+optional extension, offered by servers that list `files`. It will carry over the
+upload, stacked-master and shared-folder design from draft 0.1. It is not part of
+this draft's routes yet.
 
 ## 9. Retries
 
-Every request is safe to repeat as is. There are no idempotency keys and no
-preconditions.
+Every call is safe to repeat:
 
-| Request | Why a repeat is safe |
+| Call | Why a repeat is safe |
 | --- | --- |
-| Create a submission | The client picks the `id`. The same `id` and body returns the existing submission with `200`; a different body returns `409 id_conflict`. |
-| `PUT` and `PATCH` a rig | They set the same values again; no new revision. |
-| Upload a part | The same bytes return the same receipt. |
-| Finalize | Returns the same submission. |
-| Check in | Creates nothing new; a capture report replaces the last one. |
+| Hello | It replaces the rig's profile and presence. |
+| Tonight | It returns the list already dealt for that night. |
+| Join | Joining twice returns the share already held. |
+| Report | The same night, filter and panel keep the larger figure. |
+| Accept, decline, finish | Setting the same state again leaves the share in that state. |
+| Sign-in poll | It hands the token over once, then says `claimed`. |
 | Pair | Never repeated automatically; see section 3. |
 
 ## 10. Out of scope
 
-This draft leaves out equipment control, central scheduling, federation, raw
-image upload, dataset downloads, payments, a required quality algorithm, and the
-owner and maintainer tools for running projects. Servers publish their signup
-rules, quotas, terms, assessment methods and retention policies.
+This draft leaves out equipment control, coordinator tools, the depth map as a
+picture, federation between servers, payments and image upload (see section 8).
+Servers publish their sign-in rules, terms and retention policies themselves.

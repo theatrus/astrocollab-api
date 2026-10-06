@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/HelloResponse.schema.json",
+  "title": "HelloResponse",
+  "type": "object",
+  "required": [
+    "agent",
+    "name",
+    "protocol",
+    "serverTime"
+  ],
+  "properties": {
+    "agent": {
+      "$ref": "Id.schema.json"
+    },
+    "name": {
+      "type": "string"
+    },
+    "protocol": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "serverTime": {
+      "$ref": "UnixTime.schema.json"
+    }
+  }
+}

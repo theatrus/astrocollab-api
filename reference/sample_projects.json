@@ -1,0 +1,35 @@
+[
+  {
+    "name": "M31 halo in narrowband",
+    "kind": "mosaic",
+    "region": {"ra": 10.6847, "dec": 41.269, "width": 5.0, "height": 3.0, "rotation": 0.0},
+    "goals": {"H": 10.0, "O": 10.0},
+    "requirements": {
+      "filters": {"H": 7.0, "O": 7.0},
+      "maxHfr": 3.5,
+      "minExposure": 120.0,
+      "maxExposure": 600.0,
+      "minMoonSeparation": 30.0,
+      "minAltitude": 30.0,
+      "minFramesPerVisit": 10
+    },
+    "notes": "Faint H-alpha and OIII around M31. Calibrated subs, 7 nm filters or narrower."
+  },
+  {
+    "name": "M51 in LRGB",
+    "kind": "single",
+    "region": {"ra": 202.4696, "dec": 47.1952, "width": 0.25, "height": 0.2, "rotation": 0.0},
+    "goals": {"L": 20.0, "R": 5.0, "G": 5.0, "B": 5.0},
+    "requirements": {
+      "filters": {"L": null, "R": null, "G": null, "B": null},
+      "minFocalLength": 800.0,
+      "maxHfr": 3.0,
+      "maxGuideRms": 1.0,
+      "minExposure": 60.0,
+      "maxExposure": 300.0,
+      "maxMoonIllumination": 0.5,
+      "minFramesPerVisit": 10
+    },
+    "notes": "The Whirlpool galaxy, deep in luminance with colour on top. Focal lengths of 800 mm and up."
+  }
+]

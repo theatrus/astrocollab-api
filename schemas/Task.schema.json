@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Task.schema.json",
+  "title": "Task",
+  "type": "object",
+  "required": [
+    "id",
+    "project",
+    "region"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "Id.schema.json"
+    },
+    "project": {
+      "$ref": "Id.schema.json"
+    },
+    "projectName": {
+      "type": "string"
+    },
+    "agent": {
+      "$ref": "Id.schema.json",
+      "description": "The telescope this share belongs to."
+    },
+    "region": {
+      "$ref": "Region.schema.json",
+      "description": "The whole project's sky."
+    },
+    "filters": {
+      "type": "array",
+      "items": {
+        "$ref": "FilterTask.schema.json"
+      }
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "offered",
+        "accepted",
+        "declined",
+        "complete",
+        "superseded"
+      ],
+      "description": "`accepted` once the rig has joined or accepted it. `offered` when a coordinator pushed it\nand nobody has accepted yet. `superseded` when replaced by a newer share of the same project.",
+      "default": "offered"
+    },
+    "version": {
+      "type": "integer",
+      "format": "int32",
+      "description": "Rises whenever the share changes; a rig with this version has nothing new to do.",
+      "default": 1
+    },
+    "issued": {
+      "$ref": "UnixTime.schema.json"
+    },
+    "note": {
+      "type": "string"
+    },
+    "seconds": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Total seconds the share is worth over all nights."
+    },
+    "cells": {
+      "type": "array",
+      "items": {
+        "$ref": "Cell.schema.json"
+      },
+      "description": "This telescope's tiling of the region."
+    },
+    "share": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "int32"
+      },
+      "description": "Indexes into `cells` to shoot tonight, in order."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "single",
+        "mosaic"
+      ],
+      "default": "mosaic"
+    },
+    "visit": {
+      "anyOf": [
+        {
+          "$ref": "Visit.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "assignedNight": {
+      "anyOf": [
+        {
+          "$ref": "NightName.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The night the share was dealt for."
+    },
+    "assignedAt": {
+      "anyOf": [
+        {
+          "$ref": "UnixTime.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "dealtHours": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Hours of the night the share was dealt for."
+    },
+    "tiledRotation": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The camera angle the cells were cut for."
+    }
+  },
+  "description": "A telescope's share of a project: the whole region tiled with its own camera, and which\nof those cells are its to shoot tonight. A change to the share bumps `version`."
+}

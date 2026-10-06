@@ -1,47 +1,48 @@
 # AstroCollab API
 
-**This is a spec, not an implementation** (0.1.0-draft.1). AstroCollab is meant to be
+**This is a spec, not an implementation** (0.2.0-draft.1). AstroCollab is meant to be
 built into capture software people already use, such as N.I.N.A., and into
-servers that run projects. No capture software or public server supports it yet.
-This repository holds the specification, plus an example server and client for
-testing and for implementers to read. The draft may change incompatibly.
+servers that run projects. This draft adopts the protocol
+[Starfront](https://github.com/bray-sfro/starfront) already speaks, so Starfront's
+app and server are its first implementation. This repository holds the
+specification, plus an independent example server, an example client and a
+conformance tester. The draft may change incompatibly.
 
 **[astrocollabapi.com](https://astrocollabapi.com/)**: guides, REST reference and JSON Schemas.
 
 Shoot one deep target with other astrophotographers. A project, such as a
-600-hour H-alpha mosaic of M31, sets the targets, filters and hours each panel
-needs. At dusk each rig asks the server what to shoot and gets the panel and
-filter that suit its field of view. Calibrated subs, or masters you stack
-yourself, come back to the server, and the good ones go into one stack that no
-single backyard could build.
+narrowband mosaic of M31's halo, sets the region of sky, the hours wanted in each
+filter and the rules data must meet. Each telescope tiles the region with its own
+camera. At dusk it asks which panels to shoot tonight, and gets a list held for
+the night, in one filter chosen by the Moon and by what is thinnest. It reports
+what it shot, the server checks the numbers, and good nights count toward one
+image no single backyard could build.
 
-This repository specifies the API that capture software uses: 15 REST calls to
-pair a rig, ask for work and upload subs. Servers run signup, projects and
-review with their own tools.
+This repository specifies the API that capture software uses: 16 REST calls to
+get a telescope token, describe the rig, join projects, ask for tonight's work
+and report it. Servers run projects with their own tools.
 
-- [How the API works](spec/overview.md): one contributor's requests, step by step.
-- [Authentication](spec/authentication.md): pairing and API keys.
+- [How a night works](spec/overview.md): one telescope's requests, step by step.
+- [Authentication](spec/authentication.md): signing in, enrolling and pairing.
 - [Walkthrough](spec/walkthrough.md): every example payload, in order.
-- [Protocol](spec/protocol.md): the rules servers and clients must follow.
-- [REST reference](spec/api.md): every route, its bodies, responses and examples.
+- [Protocol](spec/protocol.md): the rules servers and programs follow.
+- [REST reference](spec/api.md): every route, its bodies, replies and examples.
 - [JSON Schemas](schemas): one standalone JSON Schema 2020-12 file per type.
-- [Codes](spec/codes.md): every error code, check-in `wait` reason and rejection reason.
 - [TypeSpec source](typespec) and generated [OpenAPI](openapi/astrocollab.yaml).
 - [Reference server](reference/README.md) and example client.
-- [Conformance tester](conformance/README.md): checks servers and clients.
-- [JSON examples](examples): validated request and response payloads.
+- [Conformance tester](conformance/README.md): checks servers, including Starfront's, and clients.
+- [JSON examples](examples): payloads captured from Starfront's server.
 - [Conformance](spec/conformance.md): required implementation tests.
 - [PSF Guard integration](integrations/psf-guard.md): proposed client adapter.
 
 ## Behavior
 
-Each project has one server. Contributors keep control of their equipment; the
-server assigns work but never commands a rig or reserves a target. It credits
-only assessed data and counts each sub once, whether it arrives alone or inside
-a master.
+Each project has one server. Telescopes always ask; the server never reaches into
+an observatory, never moves a mount and never reserves sky. It judges every
+night's report against the project's rules, and counts the same night, filter
+and panel once.
 
-The protocol originated in PSF Guard. It requires no particular client,
-scheduler, camera software or catalog format.
+The protocol requires no particular capture program, scheduler or catalog.
 
 ## Validation
 
@@ -69,8 +70,12 @@ python tools/validate.py
 ```
 
 The build compiles TypeSpec and writes three outputs: the OpenAPI file, with
-every object schema closed and examples from `examples/`; standalone JSON
-Schemas in `schemas/`; and the Markdown REST reference, `spec/api.md`. The
+examples from `examples/`; standalone JSON Schemas in `schemas/`; and the
+Markdown REST reference, `spec/api.md`.
+
+The examples are captured from Starfront's server by
+`tools/capture_starfront_examples.py`, run with a Starfront checkout's Python;
+`examples/extra/` holds the few written by hand for routes Starfront lacks. The
 schemas and the reference need no OpenAPI tools. CI fails if any output is
 stale.
 

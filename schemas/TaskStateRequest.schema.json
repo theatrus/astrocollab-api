@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/TaskStateRequest.schema.json",
+  "title": "TaskStateRequest",
+  "type": "object",
+  "required": [
+    "state"
+  ],
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "declined",
+        "complete"
+      ]
+    }
+  }
+}

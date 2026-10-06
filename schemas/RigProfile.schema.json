@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/RigProfile.schema.json",
+  "title": "RigProfile",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "focalLength": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Millimetres."
+    },
+    "pixelSize": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Microns, unbinned."
+    },
+    "sensorWidth": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "int32"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Pixels, unbinned."
+    },
+    "sensorHeight": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "format": "int32"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Pixels, unbinned."
+    },
+    "binning": {
+      "type": "integer",
+      "format": "int32",
+      "default": 1
+    },
+    "filters": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "anyOf": [
+          {
+            "type": "number",
+            "format": "double"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "description": "Filter name to bandpass in nanometres, or null where the bandpass is not known."
+    },
+    "colour": {
+      "type": "boolean",
+      "description": "A one-shot colour camera: broadband RGB, whatever is in front of it.",
+      "default": false
+    },
+    "rotation": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The camera's position angle in degrees when nothing can turn it. Null when a rotator can\nset whatever angle a project asks for."
+    },
+    "typicalHfr": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Typical star size on this rig, arcseconds."
+    },
+    "typicalGuideRms": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Typical guiding error on this rig, arcseconds."
+    },
+    "exposures": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "type": "number",
+        "format": "double"
+      },
+      "description": "The sub length this rig shoots each filter at, seconds: what its darks are built for.\nWork is dealt at these lengths so every frame can be calibrated."
+    },
+    "hoursPerNight": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Hours a night the rig gives the collaboration. Null means as long as targets are up."
+    },
+    "windowFrom": {
+      "type": "string",
+      "description": "Start of the rig's window, local clock time such as \"21:00\"."
+    },
+    "windowTo": {
+      "type": "string",
+      "description": "End of the rig's window, local clock time."
+    },
+    "scale": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Arcseconds per pixel, worked out by the program from the optics."
+    },
+    "field": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Field of view, [width, height] in degrees, worked out by the program."
+    }
+  },
+  "description": "What a telescope is and what it achieves, sent with every hello. Numbers the program does\nnot know are null. The server uses this to say whether the rig can help a project and to\ncut its cells and deal its nights."
+}

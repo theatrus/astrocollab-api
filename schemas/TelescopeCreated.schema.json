@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/TelescopeCreated.schema.json",
+  "title": "TelescopeCreated",
+  "type": "object",
+  "required": [
+    "agent",
+    "token"
+  ],
+  "properties": {
+    "agent": {
+      "$ref": "Telescope.schema.json"
+    },
+    "token": {
+      "type": "string"
+    }
+  },
+  "description": "A telescope's credential. The token is shown once; keep it on that telescope."
+}

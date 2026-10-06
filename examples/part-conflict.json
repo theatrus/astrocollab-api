@@ -1,8 +1,0 @@
-{
-  "type": "https://collab.example/problems/part-conflict",
-  "title": "Part conflict",
-  "status": 409,
-  "code": "part_conflict",
-  "detail": "This part was already received with different bytes.",
-  "request_id": "00000000-0000-4000-8000-000000000090"
-}

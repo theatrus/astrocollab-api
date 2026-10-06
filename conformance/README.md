@@ -1,146 +1,117 @@
 # Conformance tester
 
-These tools check an AstroCollab server or client against the
-[OpenAPI contract](../openapi/astrocollab.yaml) and the
-[conformance scenarios](../spec/conformance.md). They need Python 3.12 or later
+These tools check an AstroCollab 0.2 server, or a client, against the
+[protocol](../spec/protocol.md) and the [contract](../openapi/astrocollab.yaml).
+Every body is checked twice: against the OpenAPI document and against the
+standalone [JSON Schemas](../schemas/index.json). They need Python 3.12 or later
 and the packages in `requirements-dev.txt`.
 
 ## Test a server
 
-The API serves contributors only, so the suite cannot create projects. Before
-you run it, prepare on a test server:
+Use a test server, not a live one: the suite enrols telescopes, joins projects
+and reports frames.
 
-- an open project that takes calibrated subs;
-- optionally, an open project that takes stacked masters, and one that accepts
-  external delivery;
-- one or two accounts that are active members of those projects, each with an
-  API key.
+Before you run it, make two open projects with the server's own tools:
 
-The suite registers rigs and uploads synthetic frames. Do not run it against a
-live service.
+- a **mosaic** that wants a red narrowband filter (H or S) and a dark-night
+  filter (O, L, R, G or B), sets `maxHfr`, and covers a region several times the
+  width of a 530 mm field (about 2.5° by 1.7°);
+- optionally, a **single** target.
+
+Then give the suite a way to get two telescope tokens: a signed-in person's
+token, which it uses to enrol them, or two unused pairing codes.
 
 ```sh
-python -m conformance.server_suite \
-  --api-root https://collab.example/v1 \
-  --participant-key ALICE_KEY \
-  --project-id SUBS_PROJECT_ID \
-  --second-participant-key BOB_KEY \
-  --masters-project-id MASTERS_PROJECT_ID \
-  --external-project-id EXTERNAL_PROJECT_ID
+python -m conformance.server_suite --server https://collab.example \
+  --person-token=PERSON_TOKEN \
+  --project-id MOSAIC_ID --single-project-id SINGLE_ID
 ```
 
-The suite reads each project's requirements and builds rigs and manifests to
-match its first objective. Checks that need an optional flag are skipped
-without it. To test pairing, add `--pairing-code CODE` with an unused code from
-the server's account pages, and `--second-pairing-code CODE` for the same
-account. Add `--allow-http-loopback` for a local server on `http://127.0.0.1`.
-Add `--schemas schemas` to validate bodies against the standalone JSON Schemas
-instead of the OpenAPI components; the results should be the same. The proxy
-takes the same option.
+```sh
+python -m conformance.server_suite --server https://collab.example \
+  --pairing-code=CODE_1 --pairing-code=CODE_2 --project-id MOSAIC_ID
+```
 
-The suite prints one line per check:
+Add one more `--pairing-code` with a person token to check pairing as well.
+Write tokens and codes after `=`, as above: they can start with `-`.
+
+The suite reads each project's requirements and builds telescopes to fit them.
+It names its filters as people do ("Ha", "OIII", "Lum") to check that the
+server folds them to letters. It prints one line per check:
 
 ```text
-PASS repeated_put_keeps_revision [Rigs]
-FAIL changed_part_conflicts [Multipart]: PUT /uploads/.../parts/1 returned 200, expected 409 part_conflict
-SKIP submissions_hidden_from_others [Privacy]: needs --second-participant-key
+PASS  bright_moon_deals_red_narrowband [Moon]: dealt H
+FAIL  a_mosaic_night_is_one_filter [Dealing]: a mosaic night deals ['H', 'O'] filters, not one
+SKIP  pairing_code_works_once [Tokens]: the server does not list pairing
 ```
 
-The bracket names the row in `spec/conformance.md`. A check fails if the server
-returns the wrong status or code, or if any response breaks the contract. The
-suite exits with status 1 if any check fails.
+The bracket names the row in [the conformance scenarios](../spec/conformance.md).
+A check fails if the server answers with the wrong status, or if any response
+breaks the contract. The suite exits with status 1 if any check fails.
 
-The suite and the proxy also warn about any problem `code`, check-in wait
-reason or file rejection reason missing from [spec/codes.md](../spec/codes.md).
-Servers may add codes, so these are `WARN` lines, not failures.
+## What the server suite checks
 
-### What the checks cover
-
-- **Credentials.** `/capabilities` is public. The key is an active
-  member of every project named. Missing and unknown keys get `401`. A
-  submission to a project the key does not cover fails.
-- **Pairing.** A code yields a working key, with `Cache-Control: no-store`, and
-  then fails with `invalid_pairing_code`. Pairing the same installation again
-  revokes the old key.
-- **Rigs.** An identical `PUT` keeps the revision; a change makes a new one. A
-  `PATCH` changes one field and keeps the rest. A rig with only a name gets
-  `wait` with reason `rig_incomplete`.
-- **Privacy.** Another account cannot see the rig or read the submission.
-- **Asking for work.** A new rig checks in with only its ID and the time, and
-  gets `image` or `wait`. Every panel must fit the rig's field of view (2%
-  tolerance, in either orientation), name the rig and one of its filters, keep
-  exposures within the objective's range and suit its sampling. The filter must
-  serve each listed objective by the passband rule in protocol §6: a passband's
-  center lies inside an accepted band, and its width is between ¼ and 1× the
-  accepted width when both are known. Without an accepted width, centers must
-  agree within 5 nm.
-- **Sharing out the picture.** When the project's target is larger than a
-  long rig's field, two identical rigs must get different panels. Each panel
-  must still fit.
-- **Reporting progress.** A rig reports 5 unsubmitted frames for its assigned
-  panel; `reported_frames` rises by 5 for each objective the panel lists. The
-  same report again changes nothing, and `[]` returns it to where it was.
-  Reports never change accepted frames or integration.
-- **Retry.** A repeated submission with the same ID and body returns the same
-  submission with `200`; a changed body gets `409 id_conflict`. Finalizing
-  twice returns the same submission.
-- **Multipart.** Parts sent out of order are all listed. An identical retry
-  returns the same receipt. Changed bytes get `part_conflict`, a wrong digest
-  gets `digest_mismatch`, and finalizing early gets `upload_incomplete`.
-- **Recalibration.** An accepted replacement for a capture leaves the project's
-  credited captures and integration unchanged.
-- **Stacked masters.** A sub sent to the masters project, or a master sent to
-  the subs project, gets `deliverable_mismatch`. A master below `min_sub_count`
-  gets `too_few_subs` or is rejected, and earns no credit. An accepted master
-  adds one accepted frame per sub. A master that reuses a credited sub earns
-  nothing new.
-- **External delivery.** A project without `external_delivery` rejects
-  external artifacts. On the external project, an external artifact gets no
-  upload session and stays `awaiting_retrieval` after finalize, with no credit.
-  Its link does not appear in public views or to another member.
+| Row | Checks |
+| --- | --- |
+| Discovery | Health says ok and protocol 1. Sign-in status answers; starting sign-in gives a code that polls as pending, or 503 where sign-in is off. A server without `features` offers sign-in when its status says so. |
+| Tokens | Enrolling or pairing gives each telescope its own token. Where `features` lists pairing, a used code gets 401. A made-up or missing token gets 401. A person's token cannot fetch work, and a telescope's token cannot enrol or list telescopes. |
+| Browsing | Open projects are listed with kind and compatibility. |
+| Hello | A bare rig cannot help; the same rig described properly can. A newer protocol gets 409. |
+| Joining | A share arrives accepted, tiled with the rig's own field, at the rig's own sub lengths. Joining twice returns the same share. A rig with no optics gets 400; one missing a filter the project wants gets 409 with a reason. A single target is one frame, centred on it. A fixed camera's cells follow its angle. |
+| Tonight | Every share comes back. The list holds for the night, even after another rig reports. The next night moves the rig to panels it has not shot. Accepting a share keeps it accepted. |
+| Dealing | A mosaic night is one filter. Each visit has at least `minFramesPerVisit` frames. Two rigs on one mosaic get different panels. |
+| Moon | A bright Moon deals H or S; a dark night deals O, L, R, G or B. |
+| Reports | Verdicts come back in the order sent. A rig cannot report on another rig's share (403). |
+| Judging | A record past `maxHfr` is rejected with a reason. A missing star size is listed as unverified. |
+| Duplicates | Reporting the same night, filter and panel again is a duplicate, and the accepted hours rise by the larger figure only. |
+| Presence | A telescope that shared where it points shows as online, with what it shared. |
+| Errors | Unknown projects and shares get 404 with a sentence. A body that breaks its type gets 422 listing the fields. |
 
 ## Test a client
 
-Run the proxy between the client and a working server, such as the reference
-server:
+Put the proxy between the client and a working server, such as the
+[reference server](../reference/README.md):
 
 ```sh
-python -m conformance.proxy --listen 127.0.0.1:8081 \
-  --upstream http://127.0.0.1:8080/v1 --allow-http-loopback --report report.json
+python -m conformance.proxy --listen 127.0.0.1:8081 --upstream http://127.0.0.1:8800 --report report.json
 ```
 
-Point the client at `http://127.0.0.1:8081/v1` and run its normal workflow.
-Press Ctrl-C to stop the proxy. It prints client faults and server faults
-separately and exits with status 1 if it found client faults.
+Point the client at `http://127.0.0.1:8081` and run its normal night. Press
+Ctrl-C to stop the proxy. It prints what the client did wrong (unknown routes,
+missing tokens, bodies or queries that break the contract, tokens in URLs)
+apart from what the server did wrong, and exits with status 1 if the client
+did anything wrong.
 
-The proxy reports a client fault when a request:
+## In this repository's tests
 
-- uses an unknown route, method or query parameter;
-- lacks `Authorization` or another required header;
-- sends a body that breaks its schema, or a part whose length or SHA-256 is wrong;
-- puts a credential in the URL.
+`tests/test_conformance.py` runs the suite against two servers:
 
-It rewrites `api_root` in `/capabilities` so the client keeps using the proxy.
+- our [reference server](../reference/README.md), once with a person token and a
+  pairing code, and once with pairing alone, plus the example client through the
+  proxy;
+- Starfront's server, from `STARFRONT_DIR` or a checkout beside this repository
+  (`../starfront`), started under `STARFRONT_PYTHON`, Starfront's own `.venv`, or
+  this Python. It needs FastAPI and uvicorn; without them the test is skipped.
 
-## What these tools do not check
+Each server's test projects are made with that server's own tools, which the
+protocol leaves out: the reference server's Python tools, and Starfront's
+coordinator route with its admin token. The suite itself uses only the
+contract's routes.
 
-Black-box tests cannot see everything. These rows of `spec/conformance.md`
-need implementation tests of their own:
+Checks Starfront is known to fail go in `STARFRONT_GAPS` in the test; there are
+none now. The test passes while Starfront fails only known gaps, and says when
+one starts passing.
 
-- Terms and deadlines: projects and memberships are managed outside the API.
-- No locks, No useful work and Client duties: these depend on two clients
-  uploading at once, changing demand and local client behavior.
-- Geometry and Quality: these need real images and sky coverage.
-- Partial batches and Attribution.
+## What it cannot check
 
-The suite covers parts of other rows. For Finalize races and Retry it repeats
-requests in sequence, not at the same moment. For Asking for work and Sharing
-out the picture it checks that panels fit, use valid settings and differ
-between rigs, not that the server chose the best framing. For Stacked masters
-it cannot check that a master's pixels combine the subs it lists. For External
-delivery it stops at `awaiting_retrieval`; recording retrieval happens outside
-the API. For Abuse it only checks that unknown fields are rejected.
-
-The proxy sees one client's traffic. It cannot tell whether the client applies
-framing at a safe boundary, keeps local captures after losing access, or stores
-keys safely.
+- **Coordinator tools.** Starting projects, pushing shares and overruling verdicts
+  are outside the protocol.
+- **The pull order in full.** It checks that two rigs avoid each other and that a
+  rig moves on after a night, not the "thinnest field" order or the depth map.
+- **Night length.** It does not check how many visits fit a night.
+- **Sign-in in a browser.** It starts sign-in and polls once; it cannot finish it.
+- **Re-dealing within a night.** A server may re-deal a held list once when Moon
+  data first arrives or the rig's hours change by more than 15%. The suite sends
+  the Moon on every call, so it does not test that exception.
+- **Revoking telescopes and hashed tokens.** The protocol only recommends them.
+- **Files.** The optional `files` extension has no routes yet.

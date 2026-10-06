@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/HelloRequest.schema.json",
+  "title": "HelloRequest",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "type": "integer",
+      "format": "int32",
+      "description": "The protocol the program speaks.",
+      "default": 1
+    },
+    "profile": {
+      "$ref": "RigProfile.schema.json"
+    },
+    "presence": {
+      "anyOf": [
+        {
+          "$ref": "Presence.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Where the telescope points, for the others' charts. Optional."
+    }
+  }
+}

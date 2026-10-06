@@ -1,0 +1,22 @@
+[
+  {
+    "file": "extra/pairTelescope.request.json",
+    "operationId": "pairTelescope",
+    "direction": "request",
+    "schema": "PairRequest"
+  },
+  {
+    "file": "extra/pairTelescope.response.json",
+    "operationId": "pairTelescope",
+    "direction": "response",
+    "status": 200,
+    "schema": "TelescopeCreated"
+  },
+  {
+    "file": "extra/authLogout.response.json",
+    "operationId": "authLogout",
+    "direction": "response",
+    "status": 200,
+    "schema": "SignedOut"
+  }
+]

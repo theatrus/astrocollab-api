@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/TaskEnvelope.schema.json",
+  "title": "TaskEnvelope",
+  "type": "object",
+  "required": [
+    "task"
+  ],
+  "properties": {
+    "task": {
+      "$ref": "Task.schema.json"
+    }
+  }
+}

@@ -55,17 +55,23 @@ def main() -> None:
 
     manifest = json.loads((ROOT / "examples/manifest.json").read_text())
     registered = {entry["file"] for entry in manifest}
-    actual = {p.name for p in (ROOT / "examples").glob("*.json")} - {"manifest.json"}
+    examples = ROOT / "examples"
+    # setup/ holds what the capture script needed to set a night up (coordinator calls,
+    # outside the protocol); extra/ holds its own manifest, merged into the main one.
+    actual = {p.relative_to(examples).as_posix() for p in examples.rglob("*.json")
+              if p.parts[len(examples.parts)] not in ("setup",)
+              and p.name != "manifest.json"}
     assert len(registered) == len(manifest), "Duplicate fixture registration"
     assert actual == registered, f"Unregistered/missing fixtures: {actual ^ registered}"
     fixtures = {}
     coverage = {}
     for entry in manifest:
         value = json.loads((ROOT / "examples" / entry["file"]).read_text())
-        assert_payload(entry["schema"], value, entry["file"])
-        fixtures[entry["file"]] = (entry["schema"], value)
-        if "operationId" in entry:
-            key = (entry["operationId"], entry["direction"])
+        if entry.get("schema"):
+            assert_payload(entry["schema"], value, entry["file"])
+        fixtures[entry["file"]] = (entry.get("schema"), value)
+        if "operationId" in entry and entry["direction"] != "query":
+            key = (entry["operationId"], entry["direction"], entry.get("status"))
             assert key not in coverage, f"Duplicate operation fixture: {key}"
             coverage[key] = entry
 
@@ -93,15 +99,16 @@ def main() -> None:
                 content = (operation["requestBody"]["content"].get("application/json")
                            or operation["requestBody"]["content"].get("application/merge-patch+json"))
                 if content:
-                    payloads.append(("request", content))
+                    payloads.append(("request", None, content))
             for status, response in operation["responses"].items():
                 if not status.startswith("2"):
                     continue
                 content = response.get("content", {}).get("application/json")
                 if content:
-                    payloads.append(("response", content))
-            for direction, content in payloads:
-                entry = coverage[(oid, direction)]
+                    payloads.append(("response", int(status), content))
+            for direction, status, content in payloads:
+                entry = coverage.get((oid, direction, status))
+                assert entry, f"No example for {oid} {direction} {status or ''}"
                 schema_name = content["schema"]["$ref"].split("/")[-1]
                 assert entry["schema"] == schema_name, (oid, direction)
                 value = fixtures[entry["file"]][1]
@@ -137,21 +144,16 @@ def main() -> None:
     registry = Registry().with_resources(standalone.items())
     base = "https://astrocollabapi.com/schemas/"
     for entry in manifest:
+        if not entry.get("schema"):
+            continue
         schema = standalone[f"{base}{entry['schema']}.schema.json"].contents
         value = fixtures[entry["file"]][1]
         errors = list(Draft202012Validator(schema, registry=registry, format_checker=FORMATS).iter_errors(value))
         assert not errors, f"{entry['file']} fails standalone schema: {errors[0].message}"
 
-    # Every error code the REST reference lists must be defined in spec/codes.md.
-    from contract_docs import ROUTE_CODES
-    catalog = (ROOT / "spec/codes.md").read_text(encoding="utf-8")
-    defined = set(re.findall(r"^\| (?:`\d+` \| )?`([a-z_]+)` \|", catalog, re.M))
-    undefined = {code for codes in ROUTE_CODES.values() for code in codes} - defined
-    assert not undefined, f"Codes missing from spec/codes.md: {sorted(undefined)}"
-
     # Local Markdown link checks; external URLs are references, not fetched by CI.
     for file in ROOT.rglob("*.md"):
-        if ".venv" in file.parts or "node_modules" in file.parts:
+        if {".venv", "node_modules", "starfront"} & set(file.relative_to(ROOT).parts):
             continue
         for link in re.findall(r"\]\(([^)]+)\)", file.read_text(encoding="utf-8")):
             target = link.split("#")[0]

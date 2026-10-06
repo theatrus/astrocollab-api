@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Presence.schema.json",
+  "title": "Presence",
+  "type": "object",
+  "properties": {
+    "ra": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Hours."
+    },
+    "dec": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Degrees."
+    },
+    "state": {
+      "type": "string",
+      "description": "Such as \"imaging\", \"slewing\" or \"idle\"."
+    },
+    "target": {
+      "type": "string",
+      "description": "The target's name."
+    },
+    "project": {
+      "type": "string",
+      "description": "The project being shot, if any."
+    }
+  },
+  "description": "Where a telescope points and what it is doing, as much as it chooses to say."
+}

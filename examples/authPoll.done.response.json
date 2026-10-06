@@ -1,0 +1,11 @@
+{
+  "state": "done",
+  "token": "EXAMPLE_ONLY_TOKEN_02_xxxxxxxx",
+  "user": {
+    "id": "000000000000000042",
+    "name": "Vega Observatory",
+    "avatar": "",
+    "admin": false,
+    "canStart": true
+  }
+}

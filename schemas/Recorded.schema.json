@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Recorded.schema.json",
+  "title": "Recorded",
+  "type": "object",
+  "required": [
+    "id",
+    "accepted",
+    "duplicate",
+    "verdict"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "Id.schema.json"
+    },
+    "accepted": {
+      "type": "boolean"
+    },
+    "duplicate": {
+      "type": "boolean",
+      "description": "Already reported; the larger figure stands."
+    },
+    "verdict": {
+      "$ref": "Verdict.schema.json"
+    }
+  },
+  "description": "What happened to one contribution in a report."
+}

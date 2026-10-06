@@ -4,28 +4,22 @@
   "title": "PairRequest",
   "type": "object",
   "required": [
-    "pairing_code",
-    "installation_id",
-    "client_name"
+    "code",
+    "name"
   ],
   "properties": {
-    "pairing_code": {
+    "code": {
       "type": "string",
-      "minLength": 16,
+      "minLength": 1,
       "maxLength": 256,
-      "description": "Single-use code the user issued on the account pages."
+      "description": "The single-use code the person issued."
     },
-    "installation_id": {
-      "$ref": "Uuid.schema.json",
-      "description": "Persistent ID of this client installation. Pairing again replaces its old key."
-    },
-    "client_name": {
+    "name": {
       "type": "string",
       "minLength": 1,
       "maxLength": 80,
-      "description": "Name shown on the account pages, such as \"Roof rig 2\"."
+      "description": "What to call this telescope."
     }
   },
-  "description": "Trade a pairing code from the account pages for an API key.",
-  "additionalProperties": false
+  "description": "Trade a pairing code from the server's web pages for a telescope token."
 }

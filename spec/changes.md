@@ -1,6 +1,41 @@
 # Draft changes
 
-## Unreleased
+## 0.2.0-draft.1 — unreleased
+
+Adopt the collaboration protocol Starfront already speaks, with its paths, as the
+API. Starfront's capture app and server are the first implementation.
+
+- **Projects** are a region of sky, `single` or `mosaic`, with depth goals in hours
+  per filter at every point, and rules in units that mean the same on every rig:
+  focal length or scale, colour cameras, star size and guiding in arcseconds,
+  sub length, filters with bandpass limits, Moon limits, lowest altitude and the
+  fewest frames per visit.
+- **Each telescope tiles a mosaic with its own camera.** Shared grids and
+  per-panel goals are gone; depth is integration time at a point on the sky,
+  built from the solved footprints of accepted nights.
+- **Tonight's list** is dealt once per night the rig names, and held: one filter a
+  night on a mosaic, chosen by the rig's Moon and what is thinnest; panels by
+  where others are not tonight, where this rig has been least, and where the
+  field is thinnest; never fewer than the project's frames per visit.
+- **Credit comes from night reports,** judged on what the rig measured. Verdicts
+  are advisory and list what could not be checked. Reporting again keeps the
+  larger figure. Image files become an optional extension, still to be written.
+- **Tokens:** a person signs in with the device flow and enrols telescopes, or a
+  telescope pairs with a code. Person and telescope tokens never stand in for each
+  other.
+- **Rigs** describe their sub length per filter (what their darks are built for),
+  hours per night and time window, and may share where they point.
+- **Filter names** fold to one letter: L, R, G, B, H, O, S.
+- **Errors** are `{"detail": ...}`. Objects are open: unknown fields are kept or
+  ignored, never refused.
+- Coordinator routes, the 0.1 contributor routes and API keys, the code
+  catalog, uploads, stacked masters and shared folders leave this draft.
+
+
+## 0.1 revisions, superseded by 0.2
+
+These changed draft 0.1 after its first release. Draft 0.2 replaces the 0.1
+contributor API that they describe.
 
 - List every error code, check-in `wait` reason and file rejection reason in
   `spec/codes.md`. Servers keep assigning work after goals are met; more data is

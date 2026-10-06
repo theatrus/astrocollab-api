@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Compatibility.schema.json",
+  "title": "Compatibility",
+  "type": "object",
+  "required": [
+    "ok",
+    "certain",
+    "checks",
+    "summary"
+  ],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "certain": {
+      "type": "boolean",
+      "description": "True when every check could be made."
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "CompatibilityCheck.schema.json"
+      }
+    },
+    "summary": {
+      "type": "string"
+    }
+  },
+  "description": "Whether a rig meets a project's requirements, check by check."
+}

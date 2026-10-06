@@ -1,0 +1,50 @@
+{
+  "project": {
+    "id": "000000000003",
+    "name": "M51 in LRGB",
+    "coordinator": "coordinator",
+    "owner_id": "",
+    "created": 1791171020.0,
+    "status": "open",
+    "payload": {
+      "region": {
+        "ra": 202.4696,
+        "dec": 47.1952,
+        "width": 0.25,
+        "height": 0.2,
+        "rotation": 0.0
+      },
+      "kind": "single",
+      "requirements": {
+        "minFocalLength": null,
+        "maxFocalLength": 400.0,
+        "minScale": null,
+        "maxScale": null,
+        "acceptColour": true,
+        "colourMaxMoon": null,
+        "maxHfr": 3.0,
+        "maxGuideRms": null,
+        "minExposure": null,
+        "maxExposure": null,
+        "filters": {
+          "L": null,
+          "R": null,
+          "G": null,
+          "B": null
+        },
+        "maxMoonIllumination": null,
+        "minMoonSeparation": null,
+        "minAltitude": null,
+        "requireCalibrated": false,
+        "minFramesPerVisit": 10
+      },
+      "goals": {
+        "L": 20.0,
+        "R": 5.0,
+        "G": 5.0,
+        "B": 5.0
+      },
+      "notes": ""
+    }
+  }
+}

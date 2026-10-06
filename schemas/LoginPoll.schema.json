@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/LoginPoll.schema.json",
+  "title": "LoginPoll",
+  "type": "object",
+  "required": [
+    "state"
+  ],
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "done",
+        "claimed",
+        "expired"
+      ]
+    },
+    "token": {
+      "type": "string"
+    },
+    "user": {
+      "$ref": "SignedInUser.schema.json"
+    }
+  },
+  "description": "`done` hands over the person's token, once."
+}

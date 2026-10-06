@@ -1,9 +1,0 @@
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://astrocollabapi.com/schemas/Timestamp.schema.json",
-  "title": "Timestamp",
-  "type": "string",
-  "pattern": "Z$",
-  "format": "date-time",
-  "description": "RFC 3339 UTC timestamp ending in `Z`."
-}

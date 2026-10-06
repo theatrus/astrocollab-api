@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/ReportRequest.schema.json",
+  "title": "ReportRequest",
+  "type": "object",
+  "properties": {
+    "contributions": {
+      "type": "array",
+      "items": {
+        "$ref": "Contribution.schema.json"
+      },
+      "maxItems": 200,
+      "description": "One record per night, filter and panel."
+    }
+  }
+}

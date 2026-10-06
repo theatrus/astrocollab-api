@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/TaskResponse.schema.json",
+  "title": "TaskResponse",
+  "type": "object",
+  "required": [
+    "task",
+    "tasks",
+    "version",
+    "protocol"
+  ],
+  "properties": {
+    "task": {
+      "anyOf": [
+        {
+          "$ref": "Task.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The first share, for programs that expect one."
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "$ref": "Task.schema.json"
+      }
+    },
+    "requirementsByProject": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "$ref": "Requirements.schema.json"
+      },
+      "description": "Each share's project requirements, so the program can judge its own data first."
+    },
+    "version": {
+      "type": "integer",
+      "format": "int32",
+      "description": "The first share's version."
+    },
+    "protocol": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "requirements": {
+      "$ref": "Requirements.schema.json",
+      "description": "The first share's project requirements."
+    }
+  },
+  "description": "Every share this telescope holds, each dealt for tonight."
+}

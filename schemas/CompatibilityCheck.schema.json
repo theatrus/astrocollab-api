@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/CompatibilityCheck.schema.json",
+  "title": "CompatibilityCheck",
+  "type": "object",
+  "required": [
+    "check",
+    "ok",
+    "detail"
+  ],
+  "properties": {
+    "check": {
+      "type": "string"
+    },
+    "ok": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "detail": {
+      "type": "string"
+    }
+  },
+  "description": "One check of a rig against a project. `ok` is null when it cannot be told."
+}

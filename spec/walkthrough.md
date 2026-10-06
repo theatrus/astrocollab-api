@@ -1,107 +1,89 @@
 # Payload walkthrough
 
-This page walks through every example payload in order. For a shorter tour with
-requests, read [How the API works](overview.md). The examples use synthetic data
-and placeholder keys and hashes. The [example index](../examples/manifest.json)
-maps each file to its schema, and `python -m reference.client` runs the same flow
-against the [reference server](../reference/README.md).
+This page goes through every example payload in order. They were captured from
+Starfront's server driving one night, by `tools/capture_starfront_examples.py`,
+so they are what a real server sends. For a shorter tour with requests, read
+[How a night works](overview.md). The [example index](../examples/manifest.json)
+maps each file to its type.
 
-## Discover the server and pair
+## Discover the server
 
-[Capabilities](../examples/getCapabilities.response.json) give the API root, the
-account pages and the limits, such as the 8 MiB largest upload part.
+[Health](../examples/health.response.json) gives the protocol number, 1, and the
+server's build. [Sign-in status](../examples/authStatus.response.json) says
+sign-in is on; this server signs people in with Discord.
 
-The user joins a project and issues a pairing code on the server's web pages.
-The client [trades the code](../examples/pairClient.request.json) for its
-[API key](../examples/pairClient.response.json), shown only once. This key is
-limited to one project.
+## Sign in and enrol
 
-## Read the project
+The program [asks for a login code](../examples/authLogin.response.json) and opens
+its page in the browser. While the person signs in, [polling](../examples/authPoll.pending.response.json)
+says `pending`; afterwards it [hands over the person's token](../examples/authPoll.done.response.json)
+once. [Who is signed in](../examples/authMe.response.json) confirms it.
 
-[`GET /me/projects`](../examples/listMyProjects.response.json) lists the projects
-the account has joined. The [project](../examples/getProject.response.json) holds
-its current requirements: 120 accepted H-alpha frames of 300–600 seconds each,
-at least 36,000 seconds in all, over the M31 footprint, with sampling,
-calibration, a fresh pixel solve, an optional FWHM limit and deadlines. Accepted
-data must meet both the frame and the integration goal, on every panel.
+With that token the program [enrols the telescope](../examples/enrolTelescope.request.json)
+and gets [its own token](../examples/enrolTelescope.response.json), shown once.
+[Listing telescopes](../examples/listTelescopes.response.json) shows it, without
+the token. [Pairing](../examples/extra/pairTelescope.request.json) is the other
+way in, with the [same reply](../examples/extra/pairTelescope.response.json);
+Starfront does not offer it yet, so those two files are written by hand, as is
+[signing out](../examples/extra/authLogout.response.json).
 
-## Describe the rig
+## Say hello
 
-[Register the rig](../examples/registerEquipment.request.json) once with
-`PUT /me/equipment/{id}`: a 6248×4176 mono sensor with 3.76 µm pixels, a 400 mm
-focal length and a 3 nm H-alpha filter, about 3.36°×2.25° of sky. The
-[response](../examples/registerEquipment.response.json) is the saved rig. A
-[merge patch](../examples/updateEquipment.request.json) changes only the fields
-it names; the [result](../examples/updateEquipment.response.json) has a new
-revision and keeps everything else. A [color rig](../examples/color-rig-equipment.json)
-lists two passbands, H-alpha and OIII, on its dual-narrowband filter.
+The [hello](../examples/hello.request.json) describes "Vega 530": a 530 mm
+telescope with a 6248×4176 mono camera of 3.76 µm pixels, about 1.46″ per pixel
+and a field of 2.54°×1.70°. It carries 7 nm H-alpha, OIII and SII filters and a
+luminance filter of unknown bandpass, shoots 300 s narrowband and 120 s
+luminance subs to match its darks, usually reaches 2.4″ stars and 0.62″ guiding,
+and gives six hours a night between 21:30 and 04:30. It shares where it points.
+The [reply](../examples/hello.response.json) gives its ID and the server's time.
 
-## Ask what to image
+## Browse and join
 
-[Check in](../examples/checkIn.request.json) with the rig, the assignment it is
-working on and what it has captured but not yet submitted: 12 frames, one hour,
-on its panel. The
-[response](../examples/checkIn.response.json) carries an
-[assignment](../examples/assignment.json):
+[Open projects](../examples/openProjects.response.json) lists two:
 
-- one panel covering the whole target, H-alpha, 96 exposures of 300 seconds;
-- 9.6 estimated rig-hours, including acquisition overhead;
-- 6.4 estimated hours of accepted integration after quality assessment.
+- **M51 in LRGB**, a `single` project wanting 20 h of L and 5 h each of R, G and
+  B. Vega 530 cannot help: it is longer than the project's 400 mm limit and has
+  no colour filters. The listing says so, rule by rule.
+- **M31 halo in narrowband**, a 7°×4.5° `mosaic` turned to 35°, wanting 10 h of
+  H and of O at every point, with stars under 3.5″, subs of 120–600 s, 30° from
+  the Moon and above 30° altitude. Vega 530 can help.
 
-The [800 mm rig](../examples/mosaic-equipment.json) sees half that field. In this
-[project](../examples/mosaic-project.json) the target needs two panels at that
-scale, and other 800 mm rigs share the same grid. This
-[assignment](../examples/mosaic-assignment.json) gives the rig both panels, in
-order, because both need data: 48 exposures each, with about 23% overlap.
-`layout` places each in the grid. A rig with too little described gets
-[`wait`](../examples/checkin-wait.json) with `rig_incomplete`.
+The [join](../examples/joinProject.request.json) sends the rig's own sub lengths.
+The [reply](../examples/joinProject.response.json) is an `accepted` share: the
+whole mosaic tiled with nine cells of Vega 530's field, turned to 35°, at 300 s
+in H and O.
 
-## Upload calibrated subs
+## Tonight
 
-Submit a [manifest](../examples/createSubmission.request.json) after calibration.
-It lists a 300-second exposure with its capture ID, dark and flat hashes, pixel
-unit, file hashes and fresh solve, and names the assignment and panel. Raw
-frames and calibration frames stay local.
+The program [asks for tonight](../examples/tonight.query.json) with the night's
+name and a thin Moon (12% lit, up 30% of the dark hours). The
+[reply](../examples/tonight.response.json) deals six of the nine cells, in order,
+all in OIII, 11 subs of 300 s each: a dark night goes to the filter that cannot
+be shot under a bright Moon. Asking again tonight returns the same list.
 
-The [response](../examples/createSubmission.response.json) opens an upload
-session for 104,371,200 bytes: twelve parts of 8,388,608 bytes and a last part
-of 3,707,904 bytes. Send raw bytes with `Content-Length` and `X-Part-SHA256`; the
-server checks each part and returns a [receipt](../examples/putUploadPart.response.json).
-After an interruption, [read the received parts](../examples/getUpload.response.json)
-and resume.
+Shares a coordinator pushes arrive `offered`; the program
+[accepts](../examples/setTaskState.request.json) one and gets it
+[back](../examples/setTaskState.response.json). A share from joining needs no
+answer.
 
-When every part has arrived, finalize. The server returns the
-[submission](../examples/finalizeSubmission.response.json) in `processing` while
-it assesses the files; read it again until it is
-[complete](../examples/getSubmission.response.json). Here the frame is accepted
-and credits one frame and 300 seconds. If the terms changed, finalization
-returns [terms_consent_required](../examples/terms-consent-required.json) until
-the user accepts them on the web.
+## Report
 
-[Progress](../examples/getProgress.response.json) keeps accepted data apart from
-assigned, reported and pending frames. A [recalibrated file](../examples/recalibrated-submission.json)
-uses a new artifact ID and `supersedes_artifact_id` but keeps its capture
-identity, so acceptance replaces the earlier credit rather than adding to it.
+The [report](../examples/report.request.json) gives two panels of OIII, each 11
+frames of 300 s, with the solved footprint, 1.46″ per pixel, stars of 2.3″ and
+2.5″, 0.58″ guiding and a 7 nm bandpass. Both are
+[accepted](../examples/report.response.json).
 
-## Send stacked masters
+The next night's [report](../examples/report.rejected.request.json) has stars of
+4.98″, and is [rejected](../examples/report.rejected.response.json) against the
+project's 3.5″ limit, with the reason in words.
 
-A project that wants [stacked masters](../examples/stacked-masters-requirements.json)
-gets one file per stack. The [manifest](../examples/stacked-master-submission.json)
-lists the 24 subs in the master and how they were stacked. Acceptance credits
-24 subs and 7,200 seconds.
+## Presence
 
-## Share files outside the API
-
-A project that accepts [external delivery](../examples/external-delivery-requirements.json)
-lets contributors share files through a service such as Google Drive. The
-[manifest](../examples/external-submission.json) points at a shared folder and
-names each file with `path`, in place of an upload. The project fetches the file,
-checks its hash and then assesses it as usual.
+[Who is on the sky](../examples/presence.response.json): Vega 530 is online,
+pointing at M31.
 
 ## Errors
 
-Errors share one shape. Examples: an [invalid body](../examples/invalid-request.json)
-with field pointers, a reused submission ID with a different body
-([`id_conflict`](../examples/id-conflict.json)), different bytes for a received
-part ([`part_conflict`](../examples/part-conflict.json)) and a
-[rate limit](../examples/rate-limited.json).
+A request with an [unknown token](../examples/errors/unknown-token.response.json)
+gets `401`. A 1000 mm rig that tries to join M51 gets
+[`409`](../examples/errors/cannot-join.response.json) with the reasons.

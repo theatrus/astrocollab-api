@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Cell.schema.json",
+  "title": "Cell",
+  "type": "object",
+  "required": [
+    "row",
+    "column"
+  ],
+  "properties": {
+    "row": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "column": {
+      "type": "integer",
+      "format": "int32"
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "Region.schema.json"
+    }
+  ],
+  "description": "One cell of a telescope's own tiling of a project, and where it sits in that grid."
+}

@@ -1,0 +1,27 @@
+{
+  "contributions": [
+    {
+      "project": "000000000002",
+      "task": "000000000004",
+      "night": "2026-10-06",
+      "panel": "0",
+      "filterName": "OIII",
+      "frames": 11,
+      "seconds": 3300.0,
+      "exposure": 300.0,
+      "footprint": {
+        "ra": 7.648994769812747,
+        "dec": 39.769,
+        "width": 2.53966267672956,
+        "height": 1.6974441962264148,
+        "rotation": 35.0
+      },
+      "scale": 1.463313962264151,
+      "focalLength": 530.0,
+      "colour": false,
+      "hfr": 4.975267471698113,
+      "guideRms": 0.58,
+      "bandpass": 7.0
+    }
+  ]
+}

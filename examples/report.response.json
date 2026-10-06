@@ -1,0 +1,26 @@
+{
+  "recorded": [
+    {
+      "id": "000000000005",
+      "accepted": true,
+      "duplicate": false,
+      "verdict": {
+        "accepted": true,
+        "reasons": [],
+        "unverified": [],
+        "summary": "accepted"
+      }
+    },
+    {
+      "id": "000000000006",
+      "accepted": true,
+      "duplicate": false,
+      "verdict": {
+        "accepted": true,
+        "reasons": [],
+        "unverified": [],
+        "summary": "accepted"
+      }
+    }
+  ]
+}

@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Requirements.schema.json",
+  "title": "Requirements",
+  "type": "object",
+  "properties": {
+    "minFocalLength": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Millimetres."
+    },
+    "maxFocalLength": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Millimetres."
+    },
+    "minScale": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Arcseconds per pixel."
+    },
+    "maxScale": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Arcseconds per pixel."
+    },
+    "acceptColour": {
+      "type": "boolean",
+      "description": "Whether one-shot colour cameras may take part.",
+      "default": true
+    },
+    "colourMaxMoon": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Moon illumination (0–1) above which a colour camera's night is refused."
+    },
+    "maxHfr": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Mean star size over a night, arcseconds."
+    },
+    "maxGuideRms": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Mean guiding error over a night, arcseconds."
+    },
+    "minExposure": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Shortest sub, seconds."
+    },
+    "maxExposure": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Longest sub, seconds."
+    },
+    "filters": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "anyOf": [
+          {
+            "type": "number",
+            "format": "double"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "description": "Filters wanted, each to the widest bandpass accepted in nanometres, or null for any."
+    },
+    "maxMoonIllumination": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Moon illumination, 0–1."
+    },
+    "minMoonSeparation": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Degrees from the Moon."
+    },
+    "minAltitude": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Lowest altitude to shoot at, degrees."
+    },
+    "requireCalibrated": {
+      "type": "boolean",
+      "description": "Frames must be calibrated.",
+      "default": false
+    },
+    "minFramesPerVisit": {
+      "type": "integer",
+      "format": "int32",
+      "description": "The fewest frames a visit to one panel is worth: a rig stacks its own frames.",
+      "default": 10
+    }
+  },
+  "description": "What a project will take. Units mean the same on every rig: star size and guiding are in\narcseconds, never pixels. Null means no limit."
+}

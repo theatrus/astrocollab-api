@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/EnrolRequest.schema.json",
+  "title": "EnrolRequest",
+  "type": "object",
+  "required": [
+    "name"
+  ],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "What the owner calls this telescope."
+    },
+    "owner": {
+      "type": "string",
+      "maxLength": 80,
+      "default": ""
+    }
+  }
+}

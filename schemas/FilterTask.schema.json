@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/FilterTask.schema.json",
+  "title": "FilterTask",
+  "type": "object",
+  "required": [
+    "filter",
+    "exposure",
+    "hours"
+  ],
+  "properties": {
+    "filter": {
+      "type": "string"
+    },
+    "exposure": {
+      "type": "number",
+      "format": "double",
+      "description": "Sub length, seconds."
+    },
+    "hours": {
+      "type": "number",
+      "format": "double",
+      "description": "Depth wanted on each panel over all nights, hours."
+    }
+  },
+  "description": "One filter's part of a share: sub length, and depth wanted on each panel."
+}

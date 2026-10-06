@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/PresenceResponse.schema.json",
+  "title": "PresenceResponse",
+  "type": "object",
+  "required": [
+    "telescopes",
+    "online",
+    "people",
+    "onlineSeconds",
+    "serverTime"
+  ],
+  "properties": {
+    "telescopes": {
+      "type": "array",
+      "items": {
+        "$ref": "TelescopePresence.schema.json"
+      }
+    },
+    "online": {
+      "type": "integer",
+      "format": "int32",
+      "description": "Telescopes online now."
+    },
+    "people": {
+      "type": "integer",
+      "format": "int32",
+      "description": "People with a telescope online now."
+    },
+    "onlineSeconds": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "serverTime": {
+      "$ref": "UnixTime.schema.json"
+    }
+  }
+}

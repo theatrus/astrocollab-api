@@ -1,31 +1,17 @@
-// Shared types, headers and responses. The build (tools/build_openapi.py)
-// closes every model: servers reject unknown fields.
+// Shared types and responses.
 using Http;
 using OpenAPI;
 
 namespace AstroCollab;
 
-@format("uuid") scalar Uuid extends string;
+/** A server-made identifier: 12 lowercase hexadecimal characters. */
+@pattern("^[0-9a-f]{12}$") scalar Id extends string;
 
-/** RFC 3339 UTC timestamp ending in `Z`. */
-@format("date-time") @pattern("Z$") scalar Timestamp extends string;
+/** Seconds since 1970-01-01 UTC, as a number. */
+@minValue(0) scalar UnixTime extends float64;
 
-@minLength(1) @maxLength(2000) scalar Text extends string;
-@pattern("^https://") scalar HttpsUrl extends url;
-
-/** HTTPS, or plain HTTP on a loopback address for local development. */
-@pattern("^(https://|http://(127\\.0\\.0\\.1|localhost|\\[::1\\])(:[0-9]+)?(/|$))") scalar ServiceUrl extends url;
-@pattern("^[0-9a-f]{64}$") scalar Sha256 extends string;
-@pattern("^[a-z][a-z0-9_.-]{0,63}$") scalar FeatureName extends string;
-@pattern("^[a-z][a-z0-9_]+$") scalar Code extends string;
-@pattern("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$") scalar Hostname extends string;
-
-model Paging {
-  @query @minLength(1) @maxLength(4096) cursor?: string;
-  @query @minValue(1) @maxValue(100) limit?: integer = 50;
-}
-
-// Responses.
+/** A night as the rig names it, such as `2026-10-05`. */
+@maxLength(16) scalar NightName extends string;
 
 /** Success. */
 model Ok<T> {
@@ -33,47 +19,74 @@ model Ok<T> {
   @body body: T;
 }
 
-/** Already created with this `id` and body; returned unchanged. */
-model Existing<T> {
-  @statusCode _: 200;
-  @body body: T;
+/** An error. `detail` says what went wrong, in words to show the operator. */
+model ErrorBody {
+  detail: string;
 }
 
-/** Created */
-model Created<T> {
-  @statusCode _: 201;
-  @body body: T;
+/** A request body that does not match its type. Each entry names a field and the problem. */
+model ValidationErrorBody {
+  detail: {
+    loc: (string | int32)[];
+    msg: string;
+    type: string;
+  }[];
 }
 
-/** Accepted; read the resource again later. */
-model Accepted<T> {
-  @statusCode _: 202;
-  @body body: T;
-}
-
-/** Error; see `code`. */
+/** The request cannot be served as asked yet, such as joining before describing the rig. */
 @error
-model ProblemResponse {
-  @header contentType: "application/problem+json";
-  @body body: Problem;
+model BadRequest {
+  @statusCode _: 400;
+  @body body: ErrorBody;
 }
 
-/** Conflict with the resource's state, such as `upload_incomplete` or `id_conflict`. */
+/** Missing, unknown or revoked token. */
 @error
-model ConflictProblem {
+model Unauthorized {
+  @statusCode _: 401;
+  @body body: ErrorBody;
+}
+
+/** The caller may not do this. */
+@error
+model Forbidden {
+  @statusCode _: 403;
+  @body body: ErrorBody;
+}
+
+/** No such thing, or not this caller's. */
+@error
+model NotFound {
+  @statusCode _: 404;
+  @body body: ErrorBody;
+}
+
+/** Conflicts with how things stand, such as a rig that cannot meet a project. */
+@error
+model Conflict {
   @statusCode _: 409;
-  @header contentType: "application/problem+json";
-  @body body: Problem;
+  @body body: ErrorBody;
 }
 
-/** Too many requests. Retry after the stated delay. */
+/** The body does not match its type. */
 @error
-model RateLimited {
-  @statusCode _: 429;
-  @header("Retry-After") @minValue(1) retryAfter: integer;
-  @header contentType: "application/problem+json";
-  @body body: Problem;
+model Invalid {
+  @statusCode _: 422;
+  @body body: ValidationErrorBody;
 }
 
-alias Errors = ProblemResponse | RateLimited;
-alias WriteErrors = Errors | ConflictProblem;
+/** Not available on this server, such as sign-in when it is not set up. */
+@error
+model Unavailable {
+  @statusCode _: 503;
+  @body body: ErrorBody;
+}
+
+/** Too many tries, such as repeated bad pairing codes. */
+@error
+model TooManyRequests {
+  @statusCode _: 429;
+  @body body: ErrorBody;
+}
+
+alias Errors = Unauthorized | Invalid;

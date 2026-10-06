@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/OpenProject.schema.json",
+  "title": "OpenProject",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "coordinator",
+    "ownerId",
+    "region",
+    "kind",
+    "requirements",
+    "goals",
+    "notes",
+    "compatibility",
+    "joined",
+    "collected",
+    "participants",
+    "participantsOnline",
+    "participantNames"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "Id.schema.json"
+    },
+    "name": {
+      "type": "string"
+    },
+    "coordinator": {
+      "type": "string"
+    },
+    "ownerId": {
+      "type": "string",
+      "description": "Who started it."
+    },
+    "region": {
+      "$ref": "Region.schema.json"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "single",
+        "mosaic"
+      ],
+      "description": "`single`: one object everybody frames. `mosaic`: a region each rig tiles with its own camera."
+    },
+    "requirements": {
+      "$ref": "Requirements.schema.json"
+    },
+    "goals": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "type": "number",
+        "format": "double"
+      },
+      "description": "Depth wanted at every point of the region, per filter, in hours."
+    },
+    "notes": {
+      "type": "string"
+    },
+    "compatibility": {
+      "$ref": "Compatibility.schema.json",
+      "description": "Whether this telescope can help, from the profile it last sent."
+    },
+    "joined": {
+      "type": "boolean",
+      "description": "This telescope already holds a share."
+    },
+    "collected": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "type": "number",
+        "format": "double"
+      },
+      "description": "Accepted hours so far, per filter."
+    },
+    "participants": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "participantsOnline": {
+      "type": "integer",
+      "format": "int32"
+    },
+    "participantNames": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "description": "An open project, as a telescope browsing for one sees it."
+}

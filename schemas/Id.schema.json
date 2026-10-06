@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Id.schema.json",
+  "title": "Id",
+  "type": "string",
+  "pattern": "^[0-9a-f]{12}$",
+  "description": "A server-made identifier: 12 lowercase hexadecimal characters."
+}

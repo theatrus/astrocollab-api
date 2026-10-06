@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/OpenProjects.schema.json",
+  "title": "OpenProjects",
+  "type": "object",
+  "required": [
+    "projects",
+    "protocol"
+  ],
+  "properties": {
+    "projects": {
+      "type": "array",
+      "items": {
+        "$ref": "OpenProject.schema.json"
+      }
+    },
+    "protocol": {
+      "type": "integer",
+      "format": "int32"
+    }
+  }
+}

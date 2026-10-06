@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Region.schema.json",
+  "title": "Region",
+  "type": "object",
+  "required": [
+    "ra",
+    "dec",
+    "width",
+    "height"
+  ],
+  "properties": {
+    "ra": {
+      "type": "number",
+      "format": "double",
+      "description": "Right ascension of the centre, degrees."
+    },
+    "dec": {
+      "type": "number",
+      "format": "double",
+      "description": "Declination of the centre, degrees."
+    },
+    "width": {
+      "type": "number",
+      "format": "double",
+      "description": "Width on the sky, degrees."
+    },
+    "height": {
+      "type": "number",
+      "format": "double",
+      "description": "Height on the sky, degrees."
+    },
+    "rotation": {
+      "type": "number",
+      "format": "double",
+      "description": "The position angle cameras should shoot at, degrees, so panels stack the same way up.",
+      "default": 0
+    }
+  },
+  "description": "A rectangle of sky, north-up. Degrees throughout: `ra` is degrees, not hours. `width`\nand `height` are angles on the sky, not degrees of the RA coordinate."
+}

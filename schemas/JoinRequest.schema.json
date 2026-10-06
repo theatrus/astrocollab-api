@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/JoinRequest.schema.json",
+  "title": "JoinRequest",
+  "type": "object",
+  "properties": {
+    "hours": {
+      "type": "number",
+      "format": "double",
+      "minimum": 0,
+      "maximum": 24,
+      "description": "Hours per filter to give, capped by the project's goal. 0 takes the goal.",
+      "default": 0
+    },
+    "exposure": {
+      "type": "number",
+      "format": "double",
+      "minimum": 0,
+      "maximum": 3600,
+      "description": "Sub length for a filter with no entry in `exposures`. 0 takes the middle of the project's range.",
+      "default": 0
+    },
+    "exposures": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "type": "number",
+        "format": "double"
+      },
+      "description": "The rig's own sub length per filter, seconds."
+    }
+  }
+}

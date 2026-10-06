@@ -1,0 +1,17 @@
+{
+  "recorded": [
+    {
+      "id": "000000000007",
+      "accepted": false,
+      "duplicate": false,
+      "verdict": {
+        "accepted": false,
+        "reasons": [
+          "stars averaged 4.98\", project wants 3.5\" or better"
+        ],
+        "unverified": [],
+        "summary": "stars averaged 4.98\", project wants 3.5\" or better"
+      }
+    }
+  ]
+}

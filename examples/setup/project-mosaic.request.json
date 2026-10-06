@@ -1,0 +1,27 @@
+{
+  "name": "M31 halo in narrowband",
+  "kind": "mosaic",
+  "region": {
+    "ra": 10.6847,
+    "dec": 41.269,
+    "width": 7.0,
+    "height": 4.5,
+    "rotation": 35.0
+  },
+  "goals": {
+    "Ha": 10,
+    "OIII": 10
+  },
+  "requirements": {
+    "filters": {
+      "Ha": 7,
+      "OIII": 7
+    },
+    "maxHfr": 3.5,
+    "minExposure": 120,
+    "maxExposure": 600,
+    "minMoonSeparation": 30,
+    "minAltitude": 30
+  },
+  "notes": "Faint H-alpha and OIII around M31. Calibrated subs only."
+}

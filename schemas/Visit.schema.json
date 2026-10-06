@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Visit.schema.json",
+  "title": "Visit",
+  "type": "object",
+  "properties": {
+    "seconds": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Seconds to spend on each panel tonight."
+    },
+    "frames": {
+      "type": "object",
+      "unevaluatedProperties": {
+        "type": "integer",
+        "format": "int32"
+      },
+      "description": "Frames per filter on each panel tonight."
+    },
+    "filter": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Tonight's one filter, on a mosaic."
+    },
+    "moon": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "How much the Moon spoils the night the list was made for, 0–1."
+    }
+  },
+  "description": "Tonight's slice of a share."
+}

@@ -1,512 +1,520 @@
-"""Run the reference client against the reference server, then probe its rules.
+"""The AstroCollab 0.2 reference server, against the contract and the protocol's rules.
 
-The server checks every response against openapi/astrocollab.yaml, so a
-contract break shows up as a 500 internal_error whose detail starts
-"Contract violation".
+Every reply in these tests is checked against the schema the contract gives for
+that route and status, using only schemas/ (a registry keyed by $id) and the
+route table in openapi/astrocollab.yaml.
 """
-import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 import threading
-import time
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
-import uuid
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
+import yaml
 
-from reference import client  # noqa: E402
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from reference import client, rules  # noqa: E402
 from reference.server import serve  # noqa: E402
 
-ALICE, BOB = "alice-secret-for-tests", "bob-secret-for-tests"
-SURVEY, MASTERS, SHARED = 0, 1, 2  # Indexes into sample_project_ids.
+BASE = "https://astrocollabapi.com/schemas/"
+REGISTRY = Registry().with_resources(
+    (schema["$id"], Resource.from_contents(schema))
+    for schema in (json.loads(p.read_text()) for p in (ROOT / "schemas").glob("*.schema.json")))
 
 
-class Http:
-    """Small HTTP helpers shared by the test classes."""
+def _routes():
+    """(method, path pattern, {status: schema name}) for every operation."""
+    doc = yaml.safe_load((ROOT / "openapi/astrocollab.yaml").read_text())
+    table = []
+    for path, item in doc["paths"].items():
+        pattern = re.compile(re.sub(r"\{[^}]+\}", "[^/]+", path))
+        for method, op in item.items():
+            schemas = {}
+            for status, response in op["responses"].items():
+                ref = response.get("content", {}).get("application/json", {}).get("schema", {}).get("$ref")
+                if ref:
+                    schemas[status] = ref.rsplit("/", 1)[1]
+            table.append((method.upper(), pattern, schemas))
+    return table
 
-    def start(self, **options):
-        self.httpd = serve(keys={"alice": ALICE, "bob": BOB}, check_responses=True, **options)
+
+ROUTES = _routes()
+HELLO = json.loads((ROOT / "examples/hello.request.json").read_text())
+PROFILE = HELLO["profile"]
+M31, M51 = "M31 halo in narrowband", "M51 in LRGB"
+
+
+def schema_errors(name, value):
+    validator = Draft202012Validator({"$ref": BASE + f"{name}.schema.json"}, registry=REGISTRY)
+    return [f"{list(e.absolute_path)}: {e.message}" for e in validator.iter_errors(value)]
+
+
+class Harness(unittest.TestCase):
+    """A fresh server per test, and calls that check every reply."""
+
+    def setUp(self):
+        self.httpd = serve()
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
-        self.api = self.httpd.api
-        self.root = self.api.base_url + "/v1"
+        self.base = self.httpd.base_url
+        self.tools = self.httpd.tools
+        self.clock = [self.httpd.state.now()]
+        self.httpd.state.now = lambda: self.clock[0]
 
-    def stop(self):
+    def tearDown(self):
         self.httpd.shutdown()
         self.httpd.server_close()
 
-    def call(self, method, path, key=None, body=None, headers=None, raw=None):
-        headers = dict(headers or {})
-        if key:
-            headers["Authorization"] = f"Bearer {key}"
+    def advance(self, seconds):
+        self.clock[0] += seconds
+
+    def call(self, method, path, token=None, body=None, raw=None, form=None):
+        headers = {}
         data = raw
         if body is not None:
             data = json.dumps(body).encode()
-            headers.setdefault("Content-Type", "application/json")
-        request = urllib.request.Request(self.root + path, data=data, method=method, headers=headers)
+            headers["Content-Type"] = "application/json"
+        if form is not None:
+            data = urllib.parse.urlencode(form).encode()
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        request = urllib.request.Request(self.base + path, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(request) as response:
-                text = response.read()
-                return response.status, response.headers, json.loads(text) if text else None
+                status, text, kind = response.status, response.read(), response.headers["Content-Type"]
         except urllib.error.HTTPError as error:
             with error:
-                text = error.read()
-            return error.code, error.headers, json.loads(text) if text else None
+                status, text, kind = error.code, error.read(), error.headers["Content-Type"]
+        if not kind.startswith("application/json"):
+            return status, text.decode()
+        value = json.loads(text)
+        bare = urllib.parse.urlsplit(path).path
+        for route_method, pattern, schemas in ROUTES:
+            if route_method == method and pattern.fullmatch(bare):
+                name = schemas.get(str(status))
+                self.assertIsNotNone(name, f"{method} {bare} answered {status}, which the contract "
+                                           f"does not list: {value}")
+                self.assertEqual(schema_errors(name, value), [], f"{method} {bare} {status}")
+        return status, value
 
-    def post(self, path, key, body=None):
-        return self.call("POST", path, key, body)
+    # -- helpers -----------------------------------------------------------
+    def telescope(self, name="Vega 530", profile=None, person="Vega Observatory"):
+        """A paired telescope that has said hello. Returns its token."""
+        code = self.tools.issue_pairing_code(person)
+        status, made = self.call("POST", "/api/v1/pair", body={"code": code, "name": name})
+        self.assertEqual(status, 200, made)
+        token = made["token"]
+        status, _ = self.call("POST", "/api/v1/agent/hello", token,
+                              {"protocol": 1, "profile": {**PROFILE, "name": name, **(profile or {})}})
+        self.assertEqual(status, 200)
+        return token
 
-    def assertProblem(self, result, status, code):
-        self.assertEqual((result[0], result[2]["code"]), (status, code), result[2])
+    def join(self, token, project=M31, body=None):
+        project_id = self.httpd.sample_project_ids.get(project, project)
+        return self.call("POST", f"/api/v1/agent/projects/{project_id}/join", token,
+                         body if body is not None else {"hours": 0})
 
-    def project(self, index):
-        project_id = self.httpd.sample_project_ids[index]
-        return project_id, self.call("GET", f"/projects/{project_id}")[2]["requirements"]
+    def tonight(self, token, night="2026-10-05", moon=None, moon_up=None):
+        query = {}
+        if night:
+            query["night"] = night
+        if moon is not None:
+            query["moon"], query["moonUp"] = moon, moon_up
+        status, answer = self.call("GET", "/api/v1/agent/task?" + urllib.parse.urlencode(query), token)
+        self.assertEqual(status, 200, answer)
+        return answer
 
-    def put_rig(self, key, config):
-        equipment_id = str(uuid.uuid4())
-        status, _, body = self.call("PUT", f"/me/equipment/{equipment_id}", key, config)
-        self.assertEqual(status, 200, body)
-        return equipment_id
-
-    def check_in(self, config, key=ALICE, project_index=SURVEY):
-        request = {"equipment_id": self.put_rig(key, config),
-                   "project_ids": [self.httpd.sample_project_ids[project_index]],
-                   "observed_at": "2026-10-04T04:00:00Z"}
-        status, _, result = self.post("/me/checkins", key, request)
-        self.assertEqual(status, 200, result)
-        return result
-
-    @staticmethod
-    def filters(count=3):
-        return [str(uuid.uuid4()) for _ in client.FILTERS[:count]]
-
-    def submit(self, key, project_id, manifest, data):
-        """Create, upload, finalize and wait. Returns the artifact result."""
-        status, _, created = self.post(f"/projects/{project_id}/submissions", key, manifest)
-        self.assertEqual(status, 201, created)
-        for upload in created["uploads"]:
-            size = upload["part_size_bytes"]
-            for number in range(1, upload["part_count"] + 1):
-                chunk = data[(number - 1) * size:number * size]
-                self.call("PUT", f"/uploads/{upload['id']}/parts/{number}", key, raw=chunk,
-                          headers={"X-Part-SHA256": hashlib.sha256(chunk).hexdigest()})
-        status, _, finalized = self.post(f"/submissions/{created['id']}/finalize", key)
-        self.assertEqual(status, 202, finalized)
-        for _ in range(100):
-            result = self.call("GET", f"/submissions/{created['id']}", key)[2]
-            if result["state"] == "complete":
-                return result["artifacts"][0]
-            time.sleep(0.05)
-        self.fail("assessment did not finish")
-
-
-class ReferenceServerTests(Http, unittest.TestCase):
-    """The walkthrough, keys, rigs, uploads and deliverables, on one server."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.start(cls, part_size=1024)
-        cls.progress = client.run(cls.root, ALICE, log=lambda *args: None)
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.stop(cls)
-
-    def manifest(self, project_id, data, **changes):
-        """A one-sub manifest for the survey's first objective, from the example."""
-        reqs = self.call("GET", f"/projects/{project_id}")[2]["requirements"]
-        objective = reqs["objectives"][0]
-        config = client.rig("Upload rig", 400, self.filters(1))
-        equipment_id = self.put_rig(ALICE, config)
-        manifest = client.example("createSubmission.request.json")
-        artifact = manifest["artifacts"][0]
-        digest = hashlib.sha256(data).hexdigest()
-        artifact.update(id=str(uuid.uuid4()), capture_id=str(uuid.uuid4()),
-                        objective_ids=[objective["id"]],
-                        processing_group_id=objective["processing_group_id"],
-                        equipment={"equipment_id": equipment_id, "revision": 1},
-                        filter_id=config["filters"][0]["id"], bandpasses=config["filters"][0]["bandpasses"],
-                        exposure_seconds=objective["exposure"]["min_seconds"],
-                        size_bytes=len(data), sha256=digest, **changes)
-        artifact["solve"]["artifact_sha256"] = digest
-        for field in ("assignment_id", "panel_id"):
-            artifact.pop(field, None)
-        manifest.update(id=str(uuid.uuid4()), project_revision=1)
-        return manifest
-
-    def test_walkthrough_credits_one_frame(self):
-        self.assertEqual((self.progress["accepted_frames"], self.progress["accepted_integration_seconds"]),
-                         (1, 300))
-
-    def test_unknown_key_is_rejected(self):
-        self.assertProblem(self.call("GET", "/me/projects", "not-a-key"), 401, "invalid_credentials")
-
-    def test_missing_key_is_rejected(self):
-        self.assertProblem(self.call("GET", "/me/projects"), 401, "authentication_required")
-
-    def test_my_projects_lists_the_samples(self):
-        items = self.call("GET", "/me/projects", ALICE)[2]["items"]
-        self.assertEqual({p["title"] for p in items},
-                         {"Sample sky survey", "Sample masters", "Sample shared files"})
-        self.assertEqual({p["membership"] for p in items}, {"active"})
-
-    def test_rig_put_patch_and_list(self):
-        path = f"/me/equipment/{uuid.uuid4()}"
-        config = client.rig("Test rig", 400, self.filters())
-        first = self.call("PUT", path, ALICE, config)[2]
-        again = self.call("PUT", path, ALICE, config)[2]
-        self.assertEqual((first["revision"], again["revision"]), (1, 1))
-        patch = {"Content-Type": "application/merge-patch+json"}
-        patched = self.call("PATCH", path, ALICE, {"focal_length_mm": 402.5}, patch)[2]
-        self.assertEqual(patched["revision"], 2)
-        self.assertEqual(patched["configuration"]["focal_length_mm"], 402.5)
-        self.assertEqual(patched["configuration"]["filters"], config["filters"])
-        listed = self.call("GET", "/me/equipment", ALICE)[2]["items"]
-        self.assertIn(first["id"], [e["id"] for e in listed])
-
-    def test_upload_part_rules(self):
-        project_id = self.httpd.sample_project_ids[SURVEY]
-        data = b"x" * 2500
-        manifest = self.manifest(project_id, data)
-        status, _, submission = self.post(f"/projects/{project_id}/submissions", ALICE, manifest)
-        self.assertEqual(status, 201, submission)
-        self.assertEqual(self.post(f"/projects/{project_id}/submissions", ALICE, manifest)[0], 200)
-        manifest["artifacts"][0]["exposure_seconds"] += 1
-        self.assertProblem(self.post(f"/projects/{project_id}/submissions", ALICE, manifest),
-                           409, "id_conflict")
-        upload = submission["uploads"][0]
-        self.assertEqual((upload["part_size_bytes"], upload["part_count"]), (1024, 3))
-
-        def put(number, chunk, digest=None):
-            return self.call("PUT", f"/uploads/{upload['id']}/parts/{number}", ALICE, raw=chunk,
-                             headers={"X-Part-SHA256": digest or hashlib.sha256(chunk).hexdigest()})
-
-        self.assertProblem(put(1, data[:1024], "0" * 64), 422, "digest_mismatch")
-        first = put(1, data[:1024])
-        self.assertEqual(first[0], 200)
-        self.assertEqual(put(1, data[:1024])[2], first[2])  # Identical retry, same receipt.
-        self.assertProblem(put(1, b"y" * 1024), 409, "part_conflict")
-        self.assertProblem(put(3, data[2048:] + b"z"), 422, "part_size_mismatch")
-        self.assertProblem(self.post(f"/submissions/{submission['id']}/finalize", ALICE),
-                           409, "upload_incomplete")
-        self.assertProblem(self.call("GET", f"/submissions/{submission['id']}", BOB), 404, "not_found")
-
-    def test_external_delivery_is_credited_after_retrieval(self):
-        reqs = self.call("GET", f"/projects/{self.httpd.sample_project_ids[SURVEY]}")[2]["requirements"]
-        reqs = {**reqs, "external_delivery": {"providers": ["https"],
-                                              "instructions": "Share a link to the calibrated file."}}
-        project_id = self.api.create_project(reqs)
-        self.api.join("alice", project_id)
-        manifest = self.manifest(project_id, b"e" * 100)
-        artifact = manifest["artifacts"][0]
-        artifact.update(delivery="external", external={
-            "provider": "dropbox", "url": "https://files.example/share", "path": "m31/frame-1.fits",
-            "shared_at": "2026-10-04T05:00:00Z"})
-        path = f"/projects/{project_id}/submissions"
-        self.assertProblem(self.post(path, ALICE, manifest), 422, "external_delivery_not_accepted")
-        artifact["external"]["provider"] = "https"
-        status, _, submission = self.post(path, ALICE, manifest)
-        self.assertEqual((status, submission["uploads"], submission["artifacts"][0]["state"]),
-                         (201, [], "awaiting_retrieval"))
-        self.assertEqual(submission["manifest"]["artifacts"][0]["external"]["path"], "m31/frame-1.fits")
-        with self.assertRaises(Exception):  # Not finalized yet.
-            self.api.record_retrieval(artifact["id"], "verified", artifact["sha256"], artifact["size_bytes"])
-        self.assertEqual(self.post(f"/submissions/{submission['id']}/finalize", ALICE)[0], 202)
-        with self.assertRaises(Exception):
-            self.api.record_retrieval(artifact["id"], "verified", "0" * 64, artifact["size_bytes"])
-        self.api.record_retrieval(artifact["id"], "verified", artifact["sha256"], artifact["size_bytes"])
-        result = self.call("GET", f"/submissions/{submission['id']}", ALICE)[2]
-        self.assertEqual((result["state"], result["artifacts"][0]["state"],
-                          result["artifacts"][0]["credited_frames"]), ("complete", "accepted", 1))
-
-    def test_manual_assessment_tool(self):
-        project_id = self.httpd.sample_project_ids[SURVEY]
-        data = b"r" * 900
-        result = self.submit(ALICE, project_id, self.manifest(project_id, data), data)
-        self.assertEqual(result["state"], "accepted")
-        self.api.assess_artifact(result["artifact_id"], "rejected", ["quality_limit"])
-        sub = next(s for s in self.api.submissions.values()
-                   if s["manifest"]["artifacts"][0]["id"] == result["artifact_id"])
-        latest = self.call("GET", f"/submissions/{sub['id']}", ALICE)[2]["artifacts"][0]
-        self.assertEqual((latest["state"], latest["reason_codes"]), ("rejected", ["quality_limit"]))
-        self.assertNotIn("credited_frames", latest)
-
-    def test_stacked_masters(self):
-        project_id, reqs = self.project(MASTERS)
-        objective = reqs["objectives"][0]
-        config = client.rig("Masters rig", 400, self.filters())
-        equipment_id = self.put_rig(ALICE, config)
-        exposure = objective["exposure"]["min_seconds"]
-        data = b"m" * 1500
-
-        def master(subs, drizzle=False):
-            manifest = client.example("stacked-master-submission.json")
-            artifact = manifest["artifacts"][0]
-            stack = artifact["stack"]
-            stack.update(sub_count=len(subs), integration_seconds=len(subs) * exposure, subs=subs,
-                         first_captured_at=min(s["captured_at"] for s in subs),
-                         last_captured_at=max(s["captured_at"] for s in subs))
-            if drizzle:
-                stack["drizzle_scale"] = 2
-            digest = hashlib.sha256(data).hexdigest()
-            artifact.update(id=str(uuid.uuid4()), objective_ids=[objective["id"]],
-                            processing_group_id=objective["processing_group_id"],
-                            equipment={"equipment_id": equipment_id, "revision": 1},
-                            filter_id=config["filters"][0]["id"], bandpasses=config["filters"][0]["bandpasses"],
-                            exposure_seconds=exposure, size_bytes=len(data), sha256=digest)
-            artifact["solve"]["artifact_sha256"] = digest
-            for field in ("assignment_id", "panel_id"):
-                artifact.pop(field, None)
-            manifest.update(id=str(uuid.uuid4()), project_revision=1)
-            return manifest
-
-        origin = str(uuid.uuid4())
-        subs = [{"origin_id": origin, "capture_id": str(uuid.uuid4()),
-                 "captured_at": f"2026-10-04T04:{n:02d}:00Z", "sha256": f"{n:064x}"} for n in range(20)]
-        path = f"/projects/{project_id}/submissions"
-        self.assertProblem(self.post(path, ALICE, master(subs[:5])), 422, "too_few_subs")
-        self.assertProblem(self.post(path, ALICE, master(subs, drizzle=True)), 422, "drizzle_not_allowed")
-        self.assertProblem(self.post(path, ALICE, self.manifest(project_id, data)),
-                           422, "deliverable_mismatch")
-        first = self.submit(ALICE, project_id, master(subs[:10]), data)
-        self.assertEqual((first["state"], first["credited_frames"]), ("accepted", 10))
-        again = self.submit(ALICE, project_id, master(subs[9:19]), data)  # Shares one sub.
-        self.assertEqual((again["state"], again["reason_codes"]), ("rejected", ["duplicate_capture"]))
-        progress = self.call("GET", f"/projects/{project_id}/progress")[2]
-        credited = next(o for o in progress["objectives"] if o["objective_id"] == objective["id"])
-        self.assertEqual((credited["accepted_frames"], credited["accepted_integration_seconds"]),
-                         (10, 10 * exposure))
-
-    def test_pairing_issues_a_working_key_once(self):
-        code = self.httpd.issue_pairing_code("carol")
-        installation = str(uuid.uuid4())
-        request = {"pairing_code": code, "installation_id": installation, "client_name": "Roof rig"}
-        status, headers, paired = self.call("POST", "/pair", body=request)
-        self.assertEqual(status, 201, paired)
-        self.assertEqual(headers["Cache-Control"], "no-store")
-        self.assertEqual(self.call("GET", "/me/projects", paired["api_key"])[0], 200)
-        self.assertProblem(self.call("POST", "/pair", body=request), 401, "invalid_pairing_code")
-        request["pairing_code"] = self.httpd.issue_pairing_code("carol")  # Pairing again replaces the key.
-        _, _, again = self.call("POST", "/pair", body=request)
-        self.assertProblem(self.call("GET", "/me/projects", paired["api_key"]), 401, "invalid_credentials")
-        self.assertEqual(self.call("GET", "/me/projects", again["api_key"])[0], 200)
-
-    def test_pairing_for_a_rig_returns_its_id(self):
-        rig_id = str(uuid.uuid4())
-        code = self.httpd.issue_pairing_code("carol", equipment_id=rig_id)
-        _, _, paired = self.call("POST", "/pair", body={
-            "pairing_code": code, "installation_id": str(uuid.uuid4()), "client_name": "Rig"})
-        self.assertEqual(paired["equipment_id"], rig_id)
-
-    def test_project_limited_key(self):
-        code = self.httpd.issue_pairing_code("alice", project_ids=[self.httpd.sample_project_ids[MASTERS]])
-        _, _, paired = self.call("POST", "/pair", body={
-            "pairing_code": code, "installation_id": str(uuid.uuid4()), "client_name": "Limited"})
-        titles = [p["title"] for p in self.call("GET", "/me/projects", paired["api_key"])[2]["items"]]
-        self.assertEqual(titles, ["Sample masters"])
-        survey = self.httpd.sample_project_ids[SURVEY]
-        self.assertProblem(self.post(f"/projects/{survey}/submissions", paired["api_key"],
-                                     self.manifest(survey, b"z")), 403, "membership_inactive")
+    def record(self, share, index, **changes):
+        cell = share["cells"][index]
+        visit = share["visit"]
+        letter = visit.get("filter") or next(iter(visit["frames"]))
+        exposure = next(f["exposure"] for f in share["filters"] if f["filter"] == letter)
+        frames = visit["frames"][letter]
+        entry = {"project": share["project"], "task": share["id"], "night": "2026-10-05",
+                 "panel": str(index), "filterName": letter, "frames": frames,
+                 "seconds": frames * exposure, "exposure": exposure,
+                 "footprint": {k: cell[k] for k in ("ra", "dec", "width", "height", "rotation")},
+                 "scale": 1.46, "focalLength": 530.0, "hfr": 2.3, "guideRms": 0.6,
+                 "moonIllumination": 0.1, "moonSeparation": 90.0, "calibrated": True,
+                 "bandpass": 7.0, "colour": False}
+        entry.update(changes)
+        return entry
 
 
-class AssignmentTests(Http, unittest.TestCase):
-    """Assignments from check-ins. Each test gets a fresh server, so panels start empty."""
+class Tokens(Harness):
+    def test_device_sign_in_then_enrol(self):
+        status, started = self.call("POST", "/api/v1/auth/login")
+        self.assertEqual(status, 200)
+        code = started["code"]
+        self.assertEqual(self.call("GET", f"/api/v1/auth/poll?code={code}")[1]["state"], "pending")
+        status, page = self.call("GET", urllib.parse.urlsplit(started["url"]).path + "?code=" + code)
+        self.assertIn("Approve", page)
+        status, page = self.call("POST", "/signin", form={"code": code, "name": "Vega Observatory"})
+        self.assertEqual(status, 200)
+        status, done = self.call("GET", f"/api/v1/auth/poll?code={code}")
+        self.assertEqual(done["state"], "done")
+        person = done["token"]
+        self.assertEqual(self.call("GET", f"/api/v1/auth/poll?code={code}")[1]["state"], "claimed")
+        self.assertEqual(self.call("GET", "/api/v1/auth/me", person)[1]["name"], "Vega Observatory")
+        status, made = self.call("POST", "/api/v1/agents", person, {"name": "Vega 530"})
+        self.assertEqual(status, 200)
+        listed = self.call("GET", "/api/v1/agents", person)[1]["agents"]
+        self.assertEqual([t["name"] for t in listed], ["Vega 530"])
+        self.assertNotIn("token", listed[0])
+        self.assertEqual(self.call("POST", "/api/v1/agent/hello", made["token"], {"profile": PROFILE})[0], 200)
+        self.assertEqual(self.call("POST", "/api/v1/auth/logout", person)[1], {"signedOut": True})
+        self.assertEqual(self.call("GET", "/api/v1/auth/me", person)[0], 401)
 
+    def test_an_expired_sign_in_code_says_so(self):
+        code = self.call("POST", "/api/v1/auth/login")[1]["code"]
+        self.advance(601)
+        self.assertEqual(self.call("GET", f"/api/v1/auth/poll?code={code}")[1]["state"], "expired")
+
+    def test_tokens_are_kept_apart(self):
+        telescope = self.telescope()
+        person = self.tools.sign_in("Vega Observatory")
+        for path in ("/api/v1/auth/me", "/api/v1/agents"):
+            self.assertEqual(self.call("GET", path, telescope)[0], 401, path)
+        self.assertEqual(self.call("POST", "/api/v1/agents", telescope, {"name": "Sneaky"})[0], 401)
+        self.assertEqual(self.call("POST", "/api/v1/agent/hello", person, {"profile": PROFILE})[0], 401)
+        self.assertEqual(self.call("GET", "/api/v1/agent/task", person)[0], 401)
+        self.assertEqual(self.call("GET", "/api/v1/agent/task")[0], 401)
+        self.assertEqual(self.call("GET", "/api/v1/agent/task", "not-a-token")[0], 401)
+
+    def test_a_pairing_code_works_once_and_expires(self):
+        code = self.tools.issue_pairing_code("Vega Observatory")
+        self.assertEqual(self.call("POST", "/api/v1/pair", body={"code": code, "name": "A"})[0], 200)
+        self.assertEqual(self.call("POST", "/api/v1/pair", body={"code": code, "name": "B"})[0], 401)
+        late = self.tools.issue_pairing_code("Vega Observatory")
+        self.advance(3601)
+        self.assertEqual(self.call("POST", "/api/v1/pair", body={"code": late, "name": "C"})[0], 401)
+
+    def test_repeated_bad_pairing_codes_get_429(self):
+        for attempt in range(5):
+            self.assertEqual(self.call("POST", "/api/v1/pair", body={"code": f"wrong-{attempt}",
+                                                                     "name": "X"})[0], 401)
+        good = self.tools.issue_pairing_code("Vega Observatory")
+        self.assertEqual(self.call("POST", "/api/v1/pair", body={"code": good, "name": "X"})[0], 429)
+        self.advance(61)
+        self.assertEqual(self.call("POST", "/api/v1/pair", body={"code": good, "name": "X"})[0], 200)
+
+    def test_discovery(self):
+        status, health = self.call("GET", "/api/v1/health")
+        self.assertEqual((status, health["protocol"]), (200, 1))
+        self.assertEqual(set(health["features"]), {"signin", "pairing"})
+        self.assertTrue(self.call("GET", "/api/v1/auth")[1]["discord"])
+
+
+class Hello(Harness):
+    def test_a_newer_protocol_is_refused(self):
+        token = self.telescope()
+        status, answer = self.call("POST", "/api/v1/agent/hello", token, {"protocol": 2, "profile": PROFILE})
+        self.assertEqual(status, 409)
+        self.assertIn("protocol", answer["detail"])
+
+    def test_blank_numbers_are_unknown_not_refused(self):
+        token = self.telescope()
+        status, _ = self.call("POST", "/api/v1/agent/hello", token,
+                              {"profile": {"name": "Blank", "focalLength": "", "sensorWidth": "abc",
+                                           "filters": {"Ha": ""}, "binning": ""}})
+        self.assertEqual(status, 200)
+        listing = self.call("GET", "/api/v1/agent/projects", token)[1]["projects"]
+        scale = next(c for c in listing[0]["compatibility"]["checks"] if c["check"] == "scale")
+        self.assertIsNone(scale["ok"])
+
+    def test_bodies_that_break_their_type_get_422(self):
+        token = self.telescope()
+        status, answer = self.call("POST", "/api/v1/agent/hello", token, {"profile": ["not", "a", "profile"]})
+        self.assertEqual(status, 422)
+        self.assertEqual(answer["detail"][0]["loc"][:2], ["body", "profile"])
+        self.assertEqual(self.call("POST", "/api/v1/agent/hello", token, raw=b"{nope")[0], 422)
+        self.assertEqual(self.join(token, body={"hours": 30})[0], 422)
+        self.assertEqual(self.call("GET", "/api/v1/agent/task?moon=2&moonUp=0.5", token)[0], 422)
+        person = self.tools.sign_in("Someone")
+        self.assertEqual(self.call("POST", "/api/v1/agents", person, {"name": ""})[0], 422)
+
+    def test_presence_shows_who_is_on_the_sky(self):
+        token = self.telescope()
+        self.call("POST", "/api/v1/agent/hello", token,
+                  {"profile": PROFILE, "presence": {"ra": 0.71, "dec": 41.3, "state": "imaging",
+                                                    "target": "M31"}})
+        other = self.telescope("Deneb 200", person="Deneb Observatory")
+        sky = self.call("GET", "/api/v1/presence", token)[1]
+        self.assertEqual((sky["online"], sky["people"]), (2, 2))
+        mine = next(t for t in sky["telescopes"] if t["name"] == "Vega 530")
+        self.assertEqual((mine["state"], mine["target"], mine["ra"]), ("imaging", "M31", 0.71))
+        self.advance(26 * 60)
+        self.call("POST", "/api/v1/agent/hello", other, {"profile": PROFILE})
+        sky = self.call("GET", "/api/v1/presence", other)[1]
+        self.assertEqual(sky["online"], 1)
+        self.assertFalse(next(t for t in sky["telescopes"] if t["name"] == "Vega 530")["online"])
+        self.advance(25 * 3600)
+        self.call("POST", "/api/v1/agent/hello", other, {"profile": PROFILE})
+        names = [t["name"] for t in self.call("GET", "/api/v1/presence", other)[1]["telescopes"]]
+        self.assertEqual(names, ["Deneb 200"])
+
+
+class Joining(Harness):
+    def test_browsing_says_whether_the_rig_can_help(self):
+        token = self.telescope()
+        listing = {p["name"]: p for p in self.call("GET", "/api/v1/agent/projects", token)[1]["projects"]}
+        self.assertTrue(listing[M31]["compatibility"]["ok"])
+        self.assertFalse(listing[M51]["compatibility"]["ok"])
+        self.assertIn("800 mm", listing[M51]["compatibility"]["summary"])
+
+    def test_a_rig_that_cannot_help_is_refused_with_the_reason(self):
+        token = self.telescope()
+        status, answer = self.join(token, M51)
+        self.assertEqual(status, 409)
+        self.assertIn("800 mm", answer["detail"])
+        self.assertEqual(self.join(token, "000000000000")[0], 404)
+
+    def test_a_rig_with_no_optics_must_describe_itself_first(self):
+        code = self.tools.issue_pairing_code()
+        token = self.call("POST", "/api/v1/pair", body={"code": code, "name": "Blank"})[1]["token"]
+        status, answer = self.join(token)
+        self.assertEqual(status, 400)
+        self.assertIn("focal length", answer["detail"])
+
+    def test_a_rig_must_carry_every_filter_the_project_wants(self):
+        token = self.telescope(profile={"filters": {"Ha": 7.0}, "exposures": {"Ha": 300}})
+        listing = {p["name"]: p for p in self.call("GET", "/api/v1/agent/projects", token)[1]["projects"]}
+        self.assertFalse(listing[M31]["compatibility"]["ok"])
+        status, answer = self.join(token)
+        self.assertEqual(status, 409)
+        self.assertIn("no O", answer["detail"])
+        wide = self.telescope("Wide", profile={"filters": {"Ha": 12.0, "OIII": 7.0}})
+        self.assertIn("12 nm", self.join(wide)[1]["detail"])
+
+    def test_sub_lengths_outside_the_project_are_refused(self):
+        token = self.telescope()
+        status, answer = self.join(token, body={"exposures": {"Ha": 900}})
+        self.assertEqual(status, 409)
+        self.assertIn("900", answer["detail"])
+
+    def test_joining_gives_an_accepted_share_tiled_with_the_rigs_own_camera(self):
+        token = self.telescope()
+        status, joined = self.join(token)
+        self.assertEqual(status, 200)
+        share = joined["task"]
+        self.assertEqual(share["state"], "accepted")
+        width, height = rules.field(PROFILE)
+        for cell in share["cells"]:
+            self.assertAlmostEqual(cell["width"], width, places=6)
+            self.assertAlmostEqual(cell["height"], height, places=6)
+        # The cells cover the whole region.
+        region = share["region"]
+        for dx in (-0.49, 0, 0.49):
+            for dy in (-0.49, 0, 0.49):
+                dec = region["dec"] + dy * region["height"]
+                ra = region["ra"] + dx * region["width"] / max(0.1, __import__("math").cos(__import__("math").radians(dec)))
+                self.assertTrue(any(rules.contains(c, ra, dec) for c in share["cells"]), (dx, dy))
+        again = self.join(token)[1]
+        self.assertTrue(again["alreadyJoined"])
+        self.assertEqual(again["task"]["id"], share["id"])
+
+    def test_a_fixed_camera_is_tiled_at_its_own_angle(self):
+        token = self.telescope(profile={"rotation": 90.0})
+        cells = self.join(token)[1]["task"]["cells"]
+        self.assertTrue(all(c["rotation"] == 90.0 for c in cells))
+        rotator = self.telescope("Rotator", profile={"rotation": None})
+        self.assertTrue(all(c["rotation"] == 0.0 for c in self.join(rotator)[1]["task"]["cells"]))
+
+    def test_a_single_target_is_one_frame_for_everybody(self):
+        project = self.tools.create_project("Small", {"ra": 202.47, "dec": 47.2, "width": 0.2,
+                                                      "height": 0.15}, "single", {"L": 5},
+                                            {"filters": {"L": None}})
+        token = self.telescope()
+        share = self.join(token, project)[1]["task"]
+        self.assertEqual(len(share["cells"]), 1)
+        self.assertEqual(share["share"], [0])
+
+    def test_declining_a_share_takes_it_off_tonight(self):
+        token = self.telescope()
+        share = self.join(token)[1]["task"]
+        status, answer = self.call("POST", f"/api/v1/agent/task/{share['id']}", token, {"state": "declined"})
+        self.assertEqual((status, answer["task"]["state"]), (200, "declined"))
+        self.assertEqual(self.tonight(token)["tasks"], [])
+        other = self.telescope("Other", person="Other")
+        self.assertEqual(self.call("POST", f"/api/v1/agent/task/{share['id']}", other,
+                                   {"state": "accepted"})[0], 404)
+
+
+class Dealing(Harness):
+    def test_a_list_holds_for_the_night_and_moves_on_the_next(self):
+        token = self.telescope()
+        self.join(token)
+        first = self.tonight(token, "2026-10-05", 0.1, 0.1)["tasks"][0]
+        again = self.tonight(token, "2026-10-05", 0.9, 0.9)["tasks"][0]
+        self.assertEqual((again["share"], again["visit"], again["version"]),
+                         (first["share"], first["visit"], first["version"]))
+        nextnight = self.tonight(token, "2026-10-06", 0.9, 0.9)["tasks"][0]
+        self.assertEqual(nextnight["assignedNight"], "2026-10-06")
+        self.assertGreater(nextnight["version"], first["version"])
+
+    def test_a_list_with_no_night_holds_twenty_hours(self):
+        token = self.telescope()
+        self.join(token)
+        first = self.tonight(token, None)["tasks"][0]
+        self.advance(19 * 3600)
+        self.assertEqual(self.tonight(token, None)["tasks"][0]["assignedAt"], first["assignedAt"])
+        self.advance(2 * 3600)
+        self.assertGreater(self.tonight(token, None)["tasks"][0]["assignedAt"], first["assignedAt"])
+
+    def test_one_filter_a_night_on_a_mosaic_chosen_by_the_moon(self):
+        token = self.telescope()
+        self.join(token)
+        dark = self.tonight(token, "2026-10-05", 0.05, 0.1)["tasks"][0]["visit"]
+        bright = self.tonight(token, "2026-10-06", 0.95, 0.9)["tasks"][0]["visit"]
+        self.assertEqual(len(dark["frames"]), 1)
+        self.assertEqual(dark["filter"], "O")
+        self.assertIn(bright["filter"], ("H", "S"))
+
+    def test_a_visit_is_never_shorter_than_the_minimum(self):
+        token = self.telescope(profile={"hoursPerNight": 0.1})
+        self.join(token)
+        visit = self.tonight(token)["tasks"][0]["visit"]
+        self.assertGreaterEqual(min(visit["frames"].values()), 10)
+        roomy = self.telescope("Roomy", profile={"hoursPerNight": 6})
+        self.join(roomy)
+        share = self.tonight(roomy)["tasks"][0]
+        self.assertGreater(len(share["share"]), 1)
+        self.assertGreaterEqual(min(share["visit"]["frames"].values()), 10)
+
+    def test_two_rigs_on_one_night_get_different_panels(self):
+        first = self.telescope("A", profile={"hoursPerNight": 2})
+        second = self.telescope("B", profile={"hoursPerNight": 2}, person="B's owner")
+        self.join(first)
+        self.join(second)
+        a = self.tonight(first)["tasks"][0]["share"]
+        b = self.tonight(second)["tasks"][0]["share"]
+        self.assertTrue(a and b)
+        self.assertFalse(set(a) & set(b), (a, b))
+
+    def test_a_rig_moves_on_from_panels_it_has_shot(self):
+        token = self.telescope(profile={"hoursPerNight": 2})
+        self.join(token)
+        share = self.tonight(token, "2026-10-05")["tasks"][0]
+        shot = share["share"]
+        self.call("POST", "/api/v1/agent/report", token,
+                  {"contributions": [self.record(share, i) for i in shot]})
+        nextnight = self.tonight(token, "2026-10-06")["tasks"][0]["share"]
+        self.assertFalse(set(nextnight) & set(shot), (shot, nextnight))
+
+    def test_a_single_target_night_spreads_over_its_filters(self):
+        project = self.tools.create_project("LRGB", {"ra": 202.47, "dec": 47.2, "width": 0.2,
+                                                     "height": 0.15}, "single",
+                                            {"L": 10, "R": 2}, {"filters": {"L": None, "R": None}})
+        token = self.telescope(profile={"filters": {"L": None, "R": None},
+                                        "exposures": {"L": 120, "R": 120}})
+        self.join(token, project)
+        visit = self.tonight(token)["tasks"][0]["visit"]
+        self.assertEqual(set(visit["frames"]), {"L", "R"})
+        self.assertGreater(visit["frames"]["L"], visit["frames"]["R"])
+
+
+class Reports(Harness):
     def setUp(self):
-        self.start()
+        super().setUp()
+        self.token = self.telescope()
+        self.join(self.token)
+        self.share = self.tonight(self.token)["tasks"][0]
 
-    def tearDown(self):
-        self.stop()
+    def report(self, *entries, token=None):
+        status, answer = self.call("POST", "/api/v1/agent/report", token or self.token,
+                                   {"contributions": list(entries)})
+        self.assertEqual(status, 200, answer)
+        return answer["recorded"]
 
-    def test_rigs_get_different_framing(self):
-        wide = self.check_in(client.rig("Wide", 400, self.filters()))
-        long = self.check_in(client.rig("Long", 2000, self.filters()))
-        self.assertEqual(wide["action"], "image")
-        panel = wide["assignment"]["panels"][0]
-        self.assertEqual(len(wide["assignment"]["panels"]), 1)
-        self.assertEqual(panel["target_name"], "North America and Pelican nebulae")
-        self.assertEqual(panel["layout"], {"columns": 1, "rows": 1, "column": 1, "row": 1})
-        self.assertAlmostEqual(panel["footprint"]["width_degrees"], 3.36, places=2)
-        long_panel = long["assignment"]["panels"][0]
-        self.assertNotEqual(long_panel["target_id"], panel["target_id"])
-        self.assertGreater(long_panel["layout"]["columns"] * long_panel["layout"]["rows"], 1)
-        self.assertLessEqual(long_panel["footprint"]["width_degrees"], 0.68)  # Fits the 2000 mm field.
+    def test_good_data_is_accepted_and_counted(self):
+        index = self.share["share"][0]
+        [result] = self.report(self.record(self.share, index))
+        self.assertTrue(result["accepted"])
+        listing = self.call("GET", "/api/v1/agent/projects", self.token)[1]["projects"]
+        project = next(p for p in listing if p["name"] == M31)
+        letter = self.share["visit"]["filter"]
+        frames = self.share["visit"]["frames"][letter]
+        self.assertAlmostEqual(project["collected"][letter], round(frames * 300 / 3600, 2))
+        self.assertEqual(project["participants"], 1)
 
-    def test_identical_long_rigs_get_different_panels(self):
-        first = self.check_in(client.rig("Long A", 2000, self.filters()))["assignment"]
-        second = self.check_in(client.rig("Long B", 2000, self.filters()), BOB)["assignment"]
-        self.assertEqual(first["panels"][0]["target_id"], second["panels"][0]["target_id"])
-        self.assertFalse({p["id"] for p in first["panels"]} & {p["id"] for p in second["panels"]})
-        self.assertEqual(len(first["panels"]), 1)  # A panel needs the full goal: one is a night's work.
+    def test_each_broken_rule_is_named(self):
+        index = self.share["share"][0]
+        cases = {
+            "stars": {"hfr": 5.0},
+            "filter": {"filterName": "L"},
+            "bandpass": {"bandpass": 12.0},
+            "sub length": {"exposure": 30.0},
+            "Moon": {"moonSeparation": 10.0},
+        }
+        for night, (rule, change) in enumerate(cases.items()):
+            [result] = self.report(self.record(self.share, index, night=f"2026-11-{night + 1:02d}", **change))
+            self.assertFalse(result["accepted"], rule)
+            self.assertTrue(result["verdict"]["reasons"], rule)
 
-    def test_smaller_field_gets_its_own_layout(self):
-        big = self.check_in(client.rig("2000 mm", 2000, self.filters()))["assignment"]["panels"][0]
-        small = client.rig("2400 mm", 2400, self.filters())
-        small_panel = self.check_in(small)["assignment"]["panels"][0]
-        self.assertEqual(small_panel["target_id"], big["target_id"])
-        self.assertLess(small_panel["footprint"]["width_degrees"], big["footprint"]["width_degrees"])
-        wider = self.check_in(client.rig("1600 mm", 1600, self.filters()))["assignment"]["panels"][0]
-        self.assertEqual(wider["footprint"]["width_degrees"], big["footprint"]["width_degrees"])
+    def test_a_missing_measurement_is_unverified_not_passed(self):
+        [result] = self.report(self.record(self.share, self.share["share"][0], hfr=None, scale=None))
+        self.assertTrue(result["accepted"])
+        unverified = " ".join(result["verdict"]["unverified"])
+        self.assertIn("star size", unverified)
+        self.assertNotIn("scale", unverified)  # this project sets no scale rule
 
-    def test_short_rig_takes_a_small_target_whole(self):
-        config = client.rig("Small pixels", 600, self.filters(1))
-        config.update(pixel_size_um=1.5, filters=[{"id": str(uuid.uuid4()), "bandpasses": [{
-            "name": "OIII", "center_nm": 500.7, "width_nm": 3.0}]}])
-        assignment = self.check_in(config)["assignment"]
-        panel = assignment["panels"][0]
-        self.assertEqual(panel["layout"], {"columns": 1, "rows": 1, "column": 1, "row": 1})
-        self.assertIn("NGC 7662", panel["target_name"])
-        self.assertTrue(any("small in this field" in n for n in assignment["notes"]))
+    def test_other_rules_are_judged_only_on_what_the_record_gives(self):
+        [result] = self.report(self.record(self.share, self.share["share"][0], bandpass=None,
+                                           moonSeparation=None, focalLength=None))
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["verdict"]["unverified"], [])
 
-    def test_narrowband_does_not_serve_luminance(self):
-        config = client.rig("Long, H-alpha only", 2000, self.filters(1))
-        panel = self.check_in(config)["assignment"]["panels"][0]
-        self.assertIn("M42", panel["target_name"])  # Not M51's luminance goal.
+    def test_colour_cameras_and_calibration_follow_the_project(self):
+        project = self.tools.create_project("Strict", {"ra": 10.68, "dec": 41.27, "width": 1,
+                                                       "height": 1}, "mosaic", {"H": 2},
+                                            {"filters": {"H": None}, "acceptColour": False,
+                                             "requireCalibrated": True})
+        entry = {"project": project, "night": "2026-10-05", "panel": "0", "filterName": "Ha",
+                 "frames": 10, "seconds": 3000, "exposure": 300, "colour": True, "calibrated": False}
+        [result] = self.report(entry)
+        reasons = " ".join(result["verdict"]["reasons"])
+        self.assertIn("colour", reasons)
+        self.assertIn("calibrated", reasons)
 
-    def test_dual_band_color_rig_serves_two_objectives(self):
-        config = client.rig("Color rig", 400, [])
-        config.update(color_state="cfa", filters=[{
-            "id": str(uuid.uuid4()), "name": "Dual band", "kind": "dual_narrowband",
-            "bandpasses": [{"name": "H-alpha", "center_nm": 656.3, "width_nm": 7},
-                           {"name": "OIII", "center_nm": 500.7, "width_nm": 7}]}])
-        assignment = self.check_in(config)["assignment"]
-        _, reqs = self.project(SURVEY)
-        bands = {o["id"]: o["bandpasses"][0]["name"] for o in reqs["objectives"]}
-        self.assertEqual(sorted(bands[oid] for oid in assignment["panels"][0]["objective_ids"]),
-                         ["H-alpha", "OIII"])
+    def test_the_same_panel_again_keeps_the_larger_figure(self):
+        index = self.share["share"][0]
+        big = self.record(self.share, index)
+        [first] = self.report(big)
+        [again] = self.report(dict(big, frames=5, seconds=1500.0))
+        self.assertEqual((again["id"], again["duplicate"]), (first["id"], True))
+        listing = self.call("GET", "/api/v1/agent/projects", self.token)[1]["projects"]
+        letter = self.share["visit"]["filter"]
+        collected = next(p for p in listing if p["name"] == M31)["collected"][letter]
+        self.assertAlmostEqual(collected, round(big["seconds"] / 3600, 2))
 
-    def test_check_in_retry_and_continue(self):
-        equipment_id = self.put_rig(ALICE, client.rig("Long", 2000, self.filters()))
-        body = {"equipment_id": equipment_id, "observed_at": "2026-10-04T04:00:00Z"}
-        first = self.post("/me/checkins", ALICE, body)[2]["assignment"]
-        self.assertEqual(self.post("/me/checkins", ALICE, body)[2]["assignment"]["id"], first["id"])
-        panel = first["panels"][0]
-        report = {**body, "assignment_id": first["id"], "observed_at": "2026-10-04T05:00:00Z",
-                  "unsubmitted_captures": [{"panel_id": panel["id"], "frames": 3,
-                                            "integration_seconds": 3 * panel["exposure_seconds"]}]}
-        self.assertEqual(self.post("/me/checkins", ALICE, report)[2]["action"], "continue")
-        self.post("/me/checkins", ALICE, report)  # A total, not a delta: repeating changes nothing.
-        progress = self.call("GET", f"/projects/{first['project_id']}/progress")[2]
-        objective = next(o for o in progress["objectives"] if o["objective_id"] in panel["objective_ids"])
-        self.assertEqual((objective["reported_frames"], objective["assigned_frames"]),
-                         (3, panel["suggested_frames"]))
-        # Reported frames are on their way, so the next rig's need for this panel shrinks.
-        self.assertEqual(self.api.reported_frames(panel["id"]), 3)
+    def test_another_telescopes_share_is_forbidden(self):
+        other = self.telescope("Other", person="Other")
+        status, _ = self.call("POST", "/api/v1/agent/report", other,
+                              {"contributions": [self.record(self.share, 0)]})
+        self.assertEqual(status, 403)
 
-    def test_reported_frames_steer_other_rigs(self):
-        # 800 mm with 2×2 binning: 1.94″/px over a 1.7°×1.1° field, so the Heart
-        # Nebula (2°×2°) needs a mosaic in the masters project.
-        config = client.rig("800 mm binned", 800, self.filters(1))
-        config.update(binning_x=2, binning_y=2)
-        first_rig = self.put_rig(ALICE, config)
-        project_id = self.httpd.sample_project_ids[MASTERS]
-        ask = {"project_ids": [project_id], "observed_at": "2026-10-04T04:00:00Z"}
-        first = self.post("/me/checkins", ALICE, {**ask, "equipment_id": first_rig})[2]["assignment"]
-        panel = first["panels"][0]
-        self.assertGreater(panel["layout"]["columns"] * panel["layout"]["rows"], 1)
-        report = {**ask, "equipment_id": first_rig, "assignment_id": first["id"],
-                  "observed_at": "2026-10-04T06:00:00Z",
-                  "unsubmitted_captures": [{"panel_id": panel["id"], "frames": 15,
-                                            "integration_seconds": 15 * panel["exposure_seconds"]}]}
-        self.post("/me/checkins", ALICE, report)
-        self.post("/me/checkins", ALICE, report)  # A total: repeating changes nothing.
-        progress = self.call("GET", f"/projects/{project_id}/progress")[2]
-        heart = next(o for o in progress["objectives"] if o["objective_id"] in panel["objective_ids"])
-        self.assertEqual(heart["reported_frames"], 15)
-        second = self.post("/me/checkins", BOB, {**ask, "equipment_id": self.put_rig(BOB, config)})[2]
-        self.assertNotEqual(second["assignment"]["panels"][0]["id"], panel["id"])
-        self.post("/me/checkins", ALICE, {**report, "unsubmitted_captures": []})  # All submitted.
-        progress = self.call("GET", f"/projects/{project_id}/progress")[2]
-        self.assertEqual(sum(o["reported_frames"] for o in progress["objectives"]), 0)
 
-    def test_incomplete_rig_waits(self):
-        result = self.check_in({"name": "Just a name"})
-        self.assertEqual((result["action"], result["reason_codes"]), ("wait", ["rig_incomplete"]))
+class Client(Harness):
+    def test_the_example_client_runs_a_night_by_pairing(self):
+        lines = []
+        reply = client.run(self.base, pairing_code=self.tools.issue_pairing_code("Observer"),
+                           night="2026-10-05", log=lines.append)
+        self.assertEqual(len(reply["recorded"]), 2)
+        self.assertTrue(all(r["accepted"] for r in reply["recorded"]))
+        self.assertTrue(any(line.startswith("POST /api/v1/agent/report -> 200") for line in lines))
 
-    def test_low_target_is_skipped_for_site(self):
-        config = client.rig("Long", 2000, self.filters())
-        config["site"] = {"latitude_degrees": 70, "longitude_degrees": 20, "precision_km": 100,
-                          "timezone": "Europe/Oslo"}
-        name = self.check_in(config)["assignment"]["panels"][0]["target_name"]
-        self.assertNotIn("M42", name)  # Dec −5° peaks at 15° from latitude 70°.
-
-    def test_no_matching_filter_waits(self):
-        config = client.rig("Near infrared only", 400, self.filters(1))
-        config["filters"][0]["bandpasses"] = [{"name": "Near IR", "center_nm": 850, "width_nm": 100}]
-        result = self.check_in(config)
-        self.assertEqual((result["action"], result["reason_codes"]), ("wait", ["no_matching_filter"]))
-        self.assertNotIn("assignment", result)
-
-    def test_closed_project_with_goals_met_waits(self):
-        project_id, reqs = self.project(SURVEY)
-        target = reqs["targets"][5]  # NGC 7662
-        objective = next(o for o in reqs["objectives"] if o["target_id"] == target["id"])
-        self.api.publish(project_id, {**reqs, "objectives": [{**objective, "goal": {"accepted_frames": 1}}]})
-        self.api.projects[project_id]["state"] = "closed"
-        self.api.credits[(project_id, objective["id"], "test")] = {  # One credited frame, no panel.
-            "artifact_id": "test", "surplus": False, "frames": 1, "seconds": 60, "seconds_each": 60,
-            "captures": [], "panel_id": None}
-        config = client.rig("Small pixels", 600, self.filters(1))
-        config.update(pixel_size_um=1.5, filters=[{"id": str(uuid.uuid4()), "bandpasses": [{
-            "name": "OIII", "center_nm": 500.7, "width_nm": 3.0}]}])
-        result = self.check_in(config)
-        self.assertEqual((result["action"], result["reason_codes"]), ("wait", ["goals_met"]))
-
-    def test_sampling_out_of_range_waits(self):
-        result = self.check_in(client.rig("135 mm lens", 135, self.filters()))
-        self.assertEqual((result["action"], result["reason_codes"]), ("wait", ["sampling_out_of_range"]))
-
-    def test_panel_completes_and_coverage_counts(self):
-        """Frames count toward the panel they name; off-panel frames are rejected."""
-        _, reqs = self.project(SURVEY)
-        objective = next(o for o in reqs["objectives"] if o["bandpasses"][0]["name"] == "OIII"
-                         and o["target_id"] == reqs["targets"][5]["id"])  # NGC 7662, 120 frames.
-        self.api.publish(self.httpd.sample_project_ids[SURVEY], {**reqs, "objectives": [
-            {**objective, "goal": {"accepted_frames": 2}}]})
-        config = client.rig("Small pixels", 600, self.filters(1))
-        config.update(pixel_size_um=1.5, filters=[{"id": str(uuid.uuid4()), "bandpasses": [{
-            "name": "OIII", "center_nm": 500.7, "width_nm": 3.0}]}])
-        equipment_id = self.put_rig(ALICE, config)
-        project_id = self.httpd.sample_project_ids[SURVEY]
-        self.api.join("alice", project_id)  # Consent to the new revision's terms.
-        result = self.post("/me/checkins", ALICE, {"equipment_id": equipment_id,
-                                                    "observed_at": "2026-10-04T04:00:00Z"})[2]
-        panel = result["assignment"]["panels"][0]
-        self.assertEqual(panel["suggested_frames"], 3)  # Two frames, assuming 80% pass.
-
-        def frame(center):
-            data = uuid.uuid4().bytes * 10
-            manifest = client.example("createSubmission.request.json")
-            artifact = manifest["artifacts"][0]
-            digest = hashlib.sha256(data).hexdigest()
-            artifact.update(id=str(uuid.uuid4()), capture_id=str(uuid.uuid4()),
-                            objective_ids=panel["objective_ids"], processing_group_id=objective["processing_group_id"],
-                            equipment={"equipment_id": equipment_id, "revision": 1},
-                            filter_id=config["filters"][0]["id"], bandpasses=config["filters"][0]["bandpasses"],
-                            exposure_seconds=panel["exposure_seconds"], size_bytes=len(data), sha256=digest,
-                            assignment_id=result["assignment"]["id"], panel_id=panel["id"])
-            artifact["solve"].update(artifact_sha256=digest, center=center)
-            manifest.update(id=str(uuid.uuid4()), project_revision=2)
-            return self.submit(ALICE, project_id, manifest, data)
-
-        center = panel["footprint"]["center"]
-        off = {**center, "dec_degrees": center["dec_degrees"] + panel["footprint"]["height_degrees"] * 0.5}
-        self.assertEqual(frame(off)["reason_codes"], ["coverage_too_low"])
-        self.assertEqual(frame(center)["state"], "accepted")
-        self.assertEqual(frame(center)["state"], "accepted")
-        progress = self.call("GET", f"/projects/{project_id}/progress")[2]
-        self.assertTrue(progress["objectives"][0]["complete"])
-        surplus = frame(center)  # The panel already has the full goal.
-        self.assertEqual(surplus["state"], "accepted")
-        self.assertNotIn("credited_frames", surplus)
-        # Every goal is met, but the project is open: the rig still gets work.
-        more = self.post("/me/checkins", ALICE, {"equipment_id": self.put_rig(ALICE, config),
-                                                  "observed_at": "2026-10-04T06:00:00Z"})[2]
-        self.assertEqual(more["action"], "image")
-        self.assertTrue(any("surplus" in n for n in more["assignment"]["notes"]))
+    def test_the_example_client_enrols_with_a_person_token(self):
+        reply = client.run(self.base, person_token=self.tools.sign_in("Observer"),
+                           night="2026-10-05", log=lambda line: None)
+        self.assertEqual(len(reply["recorded"]), 2)
 
 
 if __name__ == "__main__":

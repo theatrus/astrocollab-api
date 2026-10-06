@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/TelescopeList.schema.json",
+  "title": "TelescopeList",
+  "type": "object",
+  "required": [
+    "agents"
+  ],
+  "properties": {
+    "agents": {
+      "type": "array",
+      "items": {
+        "$ref": "Telescope.schema.json"
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/NightName.schema.json",
+  "title": "NightName",
+  "type": "string",
+  "maxLength": 16,
+  "description": "A night as the rig names it, such as `2026-10-05`."
+}

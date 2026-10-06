@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/TelescopePresence.schema.json",
+  "title": "TelescopePresence",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "owner",
+    "ra",
+    "dec",
+    "state",
+    "target",
+    "project",
+    "ageSeconds",
+    "online"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "Id.schema.json"
+    },
+    "name": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "ra": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Hours."
+    },
+    "dec": {
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Degrees."
+    },
+    "state": {
+      "type": "string"
+    },
+    "target": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "ageSeconds": {
+      "type": "integer",
+      "format": "int32",
+      "description": "Seconds since it last checked in."
+    },
+    "online": {
+      "type": "boolean",
+      "description": "Checked in within `onlineSeconds`."
+    }
+  },
+  "description": "One telescope as the group sees it."
+}

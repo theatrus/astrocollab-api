@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/ReportResponse.schema.json",
+  "title": "ReportResponse",
+  "type": "object",
+  "required": [
+    "recorded"
+  ],
+  "properties": {
+    "recorded": {
+      "type": "array",
+      "items": {
+        "$ref": "Recorded.schema.json"
+      },
+      "description": "In the order sent."
+    }
+  }
+}

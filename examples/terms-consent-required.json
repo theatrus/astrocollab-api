@@ -1,8 +1,0 @@
-{
-  "type": "https://collab.example/problems/terms-consent-required",
-  "title": "Terms consent required",
-  "status": 409,
-  "code": "terms_consent_required",
-  "detail": "Review the current project terms before finalizing.",
-  "request_id": "00000000-0000-4000-8000-000000000090"
-}

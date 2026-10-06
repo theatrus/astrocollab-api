@@ -1,94 +1,106 @@
 # Authentication
 
-This version uses API keys only. Every private request carries one header:
+Every private request carries one header:
 
 ```http
-Authorization: Bearer <api key>
+Authorization: Bearer <token>
 ```
 
-Each client installation, such as each rig, gets its own key by pairing. There
-is no sign-in flow and nothing to refresh.
+There are two kinds of token, and neither can do the other's job:
 
-## Pairing a client
+| Token | Belongs to | Can |
+| --- | --- | --- |
+| Person token | Somebody signed in | Enrol and list their own telescopes. Nothing else. |
+| Telescope token | One telescope | Say hello, browse and join projects, fetch tonight's work, report frames. Never change a project. |
 
-1. **The user issues a pairing code.** Show `account_url` from
-   `GET /capabilities`. On that page the user issues a code and picks what the
-   key may do.
-2. **The user enters the code in the client.**
-3. **The client trades the code for a key.** No `Authorization` header:
+A telescope token lives in a settings file on an observatory PC, so it must never
+be able to rewrite a project. A person's sign-in must never be able to drive a
+mount. Keeping them apart guarantees both.
+
+A program gets a telescope token one of two ways. `GET /api/v1/health` lists
+what the server offers in `features`: `signin`, `pairing` or both.
+
+## Signing in, then enrolling
+
+The device flow, because capture software is a desktop program with no web page
+of its own.
+
+1. **Start.** Ask for a login code:
 
    ```sh
-   curl -X POST $API/pair \
-     -H "Content-Type: application/json" \
-     -d '{"pairing_code": "acpc_...", "installation_id": "'$INSTALLATION'", "client_name": "Roof rig 2"}'
+   curl -X POST $SERVER/api/v1/auth/login
    ```
 
    ```json
-   {
-     "key_id": "00000000-0000-4000-8000-000000000018",
-     "api_key": "acpk_...",
-     "client_name": "Roof rig 2",
-     "installation_id": "00000000-0000-4000-8000-000000000020"
-   }
+   { "code": "EXAMPLE_ONLY_TOKEN_01_xxxxxxxx", "url": "https://collab.example/auth/discord/start?code=EXAMPLE_ONLY_TOKEN_01_xxxxxxxx", "expiresIn": 600 }
    ```
 
-   [Full response](../examples/pairClient.response.json).
-4. **Store the key** in the system credential store, not a plain config file.
-   The server never shows it again.
-5. **Check it:**
+2. **Open `url` in the browser.** The person signs in there with whatever the
+   server uses. Starfront servers use Discord, and check the person belongs to
+   the community's Discord server. The program never sees a password.
+3. **Poll** every few seconds until the person is done:
 
    ```sh
-   curl -H "Authorization: Bearer $KEY" $API/me/projects
+   curl "$SERVER/api/v1/auth/poll?code=EXAMPLE_ONLY_TOKEN_01_xxxxxxxx"
    ```
 
-   `200` means the key works and lists the user's projects. `401` means the key
-   is wrong, expired or revoked.
-6. **Use it on every route.** The same key lists projects, registers rigs, asks
-   for work and uploads frames.
+   `pending` means keep waiting. `done` hands over the person's token once,
+   with their name and whether they may start projects
+   ([example](../examples/authPoll.done.response.json)). `claimed` means the
+   token was already handed over; `expired` means start again.
+4. **Enrol each telescope** with the person token:
 
-Make `installation_id` a random UUID when the client is installed, and keep it.
-Pairing again with the same ID replaces that installation's old key, so a user
-can re-pair a rig without leaving stale keys behind.
+   ```sh
+   curl -X POST $SERVER/api/v1/agents \
+     -H "Authorization: Bearer $PERSON" -H "Content-Type: application/json" \
+     -d '{"name": "Vega 530"}'
+   ```
 
-A code works once and expires within an hour. If pairing fails with
-`401 invalid_pairing_code`, ask the user for a new code. Never retry pairing on
-your own: if the response was lost, the user issues a new code and revokes the
-orphan key on the account pages.
+   The reply holds the telescope's `token`, shown once
+   ([example](../examples/enrolTelescope.response.json)). One person can enrol
+   several telescopes; each gets its own token.
 
-Some servers also let users copy a key from the account pages. Treat a pasted
-key the same way: store it, check it, use it.
+`GET /api/v1/auth` says whether sign-in is on; `POST /api/v1/auth/login` gives
+`503` where it is not. `GET /api/v1/auth/me` says who is signed in, and
+`POST /api/v1/auth/logout` signs out. `GET /api/v1/agents` lists the person's
+telescopes, without their tokens.
 
-## What a key can do
+## Pairing
 
-A key acts for its account. It can do everything a contributor does: list the
-account's projects, register rigs, check in and submit data. When issuing the
-pairing code, the user may limit the key to some projects or set an expiry.
+For servers that list `pairing`. Nothing to sign into from the program:
 
-On project routes the server also checks membership: only active members of a
-project receive assignments for it and submit data to it. A key limited to other
-projects gets `403` or `404`.
+1. The person issues a pairing code on the server's web pages.
+2. They type it into the program.
+3. The program trades it for a telescope token, with no `Authorization` header:
 
-## Server checklist
+   ```sh
+   curl -X POST $SERVER/api/v1/pair \
+     -H "Content-Type: application/json" \
+     -d '{"code": "EXAMPLE-ONLY-PAIRING-CODE", "name": "Vega 530"}'
+   ```
 
-To support API keys, a server needs:
+   The reply is the same as enrolling: the telescope and its token, shown once.
 
-- web pages where users issue pairing codes and list and revoke keys;
-- `POST /pair`, which consumes a code and creates a key in one transaction, and
-  revokes any earlier key for the same account and installation;
-- at least 128 bits of randomness in each code and key, stored only as hashes;
-- codes that work once and expire within an hour, and a `429` after repeated
-  bad codes;
-- for each key: account, client name, installation, optional project list,
-  optional expiry, optional rig, last use;
-- on each request: look up the key by hash; reject unknown, expired or revoked
-  keys with `401`; then check membership.
+A code works once and expires within an hour. An unknown, used or expired code
+gets `401`. Never retry pairing on your own: if the reply was lost, ask the
+person for a new code.
 
-The [reference server](../reference/README.md) shows one way to do this.
+## Keeping tokens safe
 
-## Keeping keys safe
+- Store tokens in the system credential store, not a plain settings file where
+  you can avoid it.
+- Send them only in the `Authorization` header, only over HTTPS, and only to the
+  server's own address.
+- Never write them to URLs, logs or reports.
+- Enrol or pair each telescope separately, so one can be revoked alone.
+- On `401`, stop and ask the person to sign in or pair again. Do not retry in a
+  loop.
 
-- Send keys only in the `Authorization` header, only over HTTPS, and only to the
-  server's own origin.
-- Never write them to URLs, logs, manifests or status messages.
-- Pair each installation separately, so the user can revoke one machine at a time.
-- On `401`, stop and ask the user to pair again. Do not retry in a loop.
+## For servers
+
+- Offer at least one of sign-in and pairing, and list it in `features`.
+- Keep person and telescope tokens apart: answer `401` to either kind on the
+  other's routes.
+- Store tokens as hashes where you can, and let people revoke a telescope.
+- Pairing codes: single use, at most an hour, at least 128 bits of randomness,
+  and `429` after repeated bad codes.

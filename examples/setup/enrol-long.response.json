@@ -1,0 +1,13 @@
+{
+  "agent": {
+    "id": "000000000008",
+    "name": "Vega 1000",
+    "owner": "Vega Observatory",
+    "owner_id": "000000000000000042",
+    "created": 1791171050.0,
+    "seen": 0.0,
+    "profile": {},
+    "presence": {}
+  },
+  "token": "EXAMPLE_ONLY_TOKEN_04_xxxxxxxx"
+}

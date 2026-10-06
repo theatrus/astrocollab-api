@@ -5,7 +5,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 let contract;
 let operations = [];
 let toastTimer;
-const groupNames = {capabilities:'Discovery', pairing:'Pairing', projects:'Projects', rigs:'Rigs & assignments', submissions:'Submissions & uploads'};
+const groupNames = {discovery:'Discovery', signin:'Signing in', telescopes:'Telescopes and tokens', telescope:"The telescope's night"};
 // 'none', 'optional' or 'required', from the operation's OpenAPI security.
 function keyRule(op) {
   const security = op.security || contract.security || [];
@@ -71,7 +71,7 @@ function curlExample(op) {
   const query = parameters.filter(p => p.in === 'query' && p.required).map(p => `${p.name}=${p.schema.type === 'integer' ? '1' : 'EXAMPLE_CURSOR'}`);
   if (query.length) url += '?' + query.join('&');
   const lines = [`curl --request ${op.method.toUpperCase()} '${url}'`];
-  if (keyRule(op) !== 'none') lines.push(`  --header 'Authorization: Bearer YOUR_API_KEY'`);
+  if (keyRule(op) !== 'none') lines.push(`  --header 'Authorization: Bearer YOUR_TOKEN'`);
   for (const p of parameters.filter(p => p.in === 'header' && p.required)) {
     let value = p.example || (p.name === 'X-Part-SHA256' ? 'SHA256_OF_PART_BYTES' : p.name === 'Content-Length' ? 'ACTUAL_PART_BYTE_COUNT' : p.name === 'If-Match' ? '"ETAG_FROM_LAST_READ"' : 'VALUE');
     lines.push(`  --header '${p.name}: ${value}'`);
@@ -103,18 +103,19 @@ function renderSidebar() {
 }
 function renderReferenceHome() {
   $('#endpoint-content').innerHTML = `<p class="eyebrow">ASTROCOLLAB API / ${escapeHtml(contract.info.version)}</p><h1>API reference</h1><p class="reference-intro">${operations.length} operations. Schemas and examples come from the OpenAPI specification.</p><div class="notice">Draft specification. <code>collab.example</code> is a placeholder. This page does not send API requests.</div><div class="operation-cards">${[
-    ['pairClient','Pair a rig','Trade a pairing code from the web pages for an API key.'],
-    ['registerEquipment','Describe the rig','Sensor, optics and filters, so the server can plan for it.'],
-    ['checkIn','Ask what to image','Get the part of the picture that most needs data and fits the rig.'],
-    ['createSubmission','Send your data','Calibrated subs or stacked masters, uploaded or shared.'],
-    ['getSubmission','Read the result','See which files were accepted and what they earned.'],
-    ['getProgress','Watch the picture fill','Goals and accepted data for each objective.']
+    ['hello','Describe the rig','Optics, filters, sub lengths and what the rig achieves.'],
+    ['openProjects','Find a project','Open projects, and whether your rig can help each one.'],
+    ['joinProject','Join it','A share of the project, tiled with your own camera.'],
+    ['tonight','Ask what to shoot','Tonight\'s panels, filter and frames, held for the night.'],
+    ['report','Report your night','What you shot, and whether each night counts.'],
+    ['presence','See who is out','Every telescope on the sky, and where it points.']
   ].map(([id,title,description]) => `<a class="operation-card" href="#operation/${id}"><p class="eyebrow">${id}</p><h2>${title} ↗</h2><p>${description}</p></a>`).join('')}</div>`;
 }
 function renderOperation(op) {
   const parameters = (op.parameters || []).map(resolve);
-  const auth = {none: 'No API key needed.', optional: 'API key optional. Public projects can be read without one.', required: 'Requires an API key.'}[keyRule(op)];
-  let html = `<p class="eyebrow">${escapeHtml(groupNames[op.tags[0]] || op.tags[0])} / ${escapeHtml(op.operationId)}</p><h1>${escapeHtml(op.summary)}</h1><div class="endpoint-path">${badge(op.method)}<code>${escapeHtml(op.path)}</code></div>${op.description ? `<p class="endpoint-description">${escapeHtml(op.description)}</p>` : ''}<div class="auth-box"><b>Authorization</b><p>${escapeHtml(auth)} On project routes the server also checks that the account is an active member. <a class="text-link" href="#guide/authentication">Authentication guide ↗</a></p></div>`;
+  const person = ['authMe','authLogout','enrolTelescope','listTelescopes'].includes(op.operationId);
+  const auth = keyRule(op) === 'none' ? 'No token needed.' : person ? "A person's token, from signing in." : "The telescope's agent token.";
+  let html = `<p class="eyebrow">${escapeHtml(groupNames[op.tags[0]] || op.tags[0])} / ${escapeHtml(op.operationId)}</p><h1>${escapeHtml(op.summary)}</h1><div class="endpoint-path">${badge(op.method)}<code>${escapeHtml(op.path)}</code></div>${op.description ? `<p class="endpoint-description">${escapeHtml(op.description)}</p>` : ''}<div class="auth-box"><b>Authorization</b><p>${escapeHtml(auth)} Telescope routes take the telescope's token; account routes take a person's token. <a class="text-link" href="#guide/authentication">Authentication guide ↗</a></p></div>`;
   if (parameters.length) html += `<section class="reference-section"><h2>Parameters</h2><div class="table-scroll"><table class="parameter-table"><thead><tr><th>NAME / LOCATION</th><th>TYPE / REQUIREMENT</th><th>DETAILS</th></tr></thead><tbody>${parameters.map(p => `<tr><td><code>${escapeHtml(p.name)}</code><small>${escapeHtml(p.in)}</small></td><td>${escapeHtml(typeName(p.schema))}<br><span class="${p.required ? 'required' : 'optional'}">${p.required ? 'required' : 'optional'}</span></td><td>${escapeHtml(p.description || '')}${constraints(p.schema)}</td></tr>`).join('')}</tbody></table></div></section>`;
   const request = op.requestBody;
   if (request) {

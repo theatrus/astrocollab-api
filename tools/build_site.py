@@ -15,7 +15,6 @@ DEST = ROOT / "_site"
 GUIDES = {
     "how-it-works": "spec/overview.md",
     "rest": "spec/api.md",
-    "codes": "spec/codes.md",
     "authentication": "spec/authentication.md",
     "walkthrough": "spec/walkthrough.md",
     "protocol": "spec/protocol.md",
@@ -34,9 +33,12 @@ def build() -> None:
     for folder in ("openapi", "examples", "schemas", "tests"):
         target = DEST / folder
         target.mkdir(exist_ok=True)
-        for source in (ROOT / folder).glob("*"):
+        # Subfolders too: examples keep errors/ and extra/ beside the main set.
+        for source in (ROOT / folder).rglob("*"):
             if source.is_file() and source.suffix in (".yaml", ".json"):
-                shutil.copyfile(source, target / source.name)
+                copy = target / source.relative_to(ROOT / folder)
+                copy.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, copy)
     spec = yaml.safe_load((ROOT / "openapi/astrocollab.yaml").read_text(encoding="utf-8"))
     (DEST / "openapi/astrocollab.json").write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
     templates = []

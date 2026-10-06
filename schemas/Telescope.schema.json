@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/Telescope.schema.json",
+  "title": "Telescope",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "created"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "Id.schema.json"
+    },
+    "name": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string",
+      "description": "The owner's display name."
+    },
+    "owner_id": {
+      "type": "string"
+    },
+    "created": {
+      "$ref": "UnixTime.schema.json"
+    },
+    "seen": {
+      "$ref": "UnixTime.schema.json",
+      "description": "Last check-in, or 0 if never."
+    },
+    "profile": {
+      "$ref": "RigProfile.schema.json"
+    },
+    "presence": {
+      "anyOf": [
+        {
+          "$ref": "Presence.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "description": "An enrolled telescope. The token is never listed."
+}

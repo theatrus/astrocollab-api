@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/ErrorBody.schema.json",
+  "title": "ErrorBody",
+  "type": "object",
+  "required": [
+    "detail"
+  ],
+  "properties": {
+    "detail": {
+      "type": "string"
+    }
+  },
+  "description": "An error. `detail` says what went wrong, in words to show the operator."
+}

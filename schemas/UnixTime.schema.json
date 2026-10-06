@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://astrocollabapi.com/schemas/UnixTime.schema.json",
+  "title": "UnixTime",
+  "type": "number",
+  "format": "double",
+  "minimum": 0,
+  "description": "Seconds since 1970-01-01 UTC, as a number."
+}

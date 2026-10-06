@@ -1,201 +1,186 @@
 [
   {
-    "file": "getCapabilities.response.json",
-    "schema": "Capabilities",
-    "operationId": "getCapabilities",
+    "file": "health.response.json",
+    "operationId": "health",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "Health"
   },
   {
-    "file": "pairClient.request.json",
-    "schema": "PairRequest",
-    "operationId": "pairClient",
-    "direction": "request"
-  },
-  {
-    "file": "pairClient.response.json",
-    "schema": "PairedKey",
-    "operationId": "pairClient",
+    "file": "authStatus.response.json",
+    "operationId": "authStatus",
     "direction": "response",
-    "status": 201
+    "status": 200,
+    "schema": "AuthStatus"
   },
   {
-    "file": "listMyProjects.response.json",
-    "schema": "MyProjectPage",
-    "operationId": "listMyProjects",
+    "file": "authLogin.response.json",
+    "operationId": "authLogin",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "LoginStarted"
   },
   {
-    "file": "getProject.response.json",
-    "schema": "Project",
-    "operationId": "getProject",
+    "file": "authPoll.pending.response.json",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "LoginPoll"
   },
   {
-    "file": "registerEquipment.response.json",
-    "schema": "Equipment",
-    "operationId": "registerEquipment",
+    "file": "authPoll.done.response.json",
+    "operationId": "authPoll",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "LoginPoll"
   },
   {
-    "file": "registerEquipment.request.json",
-    "schema": "EquipmentInput",
-    "operationId": "registerEquipment",
-    "direction": "request"
-  },
-  {
-    "file": "updateEquipment.request.json",
-    "schema": "EquipmentInputMergePatchUpdate",
-    "operationId": "updateEquipment",
-    "direction": "request"
-  },
-  {
-    "file": "updateEquipment.response.json",
-    "schema": "Equipment",
-    "operationId": "updateEquipment",
+    "file": "authMe.response.json",
+    "operationId": "authMe",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "Me"
   },
   {
-    "file": "getEquipment.response.json",
-    "schema": "Equipment",
-    "operationId": "getEquipment",
+    "file": "enrolTelescope.request.json",
+    "operationId": "enrolTelescope",
+    "direction": "request",
+    "schema": "EnrolRequest"
+  },
+  {
+    "file": "enrolTelescope.response.json",
+    "operationId": "enrolTelescope",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "TelescopeCreated"
   },
   {
-    "file": "listEquipment.response.json",
-    "schema": "EquipmentPage",
-    "operationId": "listEquipment",
+    "file": "hello.request.json",
+    "operationId": "hello",
+    "direction": "request",
+    "schema": "HelloRequest"
+  },
+  {
+    "file": "hello.response.json",
+    "operationId": "hello",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "HelloResponse"
   },
   {
-    "file": "checkIn.response.json",
-    "schema": "CheckinResult",
-    "operationId": "checkIn",
+    "file": "openProjects.response.json",
+    "operationId": "openProjects",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "OpenProjects"
   },
   {
-    "file": "checkIn.request.json",
-    "schema": "Checkin",
-    "operationId": "checkIn",
-    "direction": "request"
+    "file": "joinProject.request.json",
+    "operationId": "joinProject",
+    "direction": "request",
+    "schema": "JoinRequest"
   },
   {
-    "file": "getProgress.response.json",
-    "schema": "Progress",
-    "operationId": "getProgress",
+    "file": "joinProject.response.json",
+    "operationId": "joinProject",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "JoinResponse"
   },
   {
-    "file": "createSubmission.response.json",
-    "schema": "Submission",
-    "operationId": "createSubmission",
+    "file": "tonight.query.json",
+    "operationId": "tonight",
+    "direction": "query"
+  },
+  {
+    "file": "tonight.response.json",
+    "operationId": "tonight",
     "direction": "response",
-    "status": 201
+    "status": 200,
+    "schema": "TaskResponse"
   },
   {
-    "file": "createSubmission.request.json",
-    "schema": "SubmissionCreate",
-    "operationId": "createSubmission",
-    "direction": "request"
+    "file": "setTaskState.request.json",
+    "operationId": "setTaskState",
+    "direction": "request",
+    "schema": "TaskStateRequest"
   },
   {
-    "file": "getSubmission.response.json",
-    "schema": "Submission",
-    "operationId": "getSubmission",
+    "file": "setTaskState.response.json",
+    "operationId": "setTaskState",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "TaskEnvelope"
   },
   {
-    "file": "getUpload.response.json",
-    "schema": "UploadSession",
-    "operationId": "getUpload",
+    "file": "report.request.json",
+    "operationId": "report",
+    "direction": "request",
+    "schema": "ReportRequest"
+  },
+  {
+    "file": "report.response.json",
+    "operationId": "report",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "ReportResponse"
   },
   {
-    "file": "putUploadPart.response.json",
-    "schema": "PartReceipt",
-    "operationId": "putUploadPart",
+    "file": "report.rejected.request.json",
+    "direction": "request",
+    "schema": "ReportRequest"
+  },
+  {
+    "file": "report.rejected.response.json",
     "direction": "response",
-    "status": 200
+    "status": 200,
+    "schema": "ReportResponse"
   },
   {
-    "file": "finalizeSubmission.response.json",
-    "schema": "Submission",
-    "operationId": "finalizeSubmission",
+    "file": "presence.response.json",
+    "operationId": "presence",
     "direction": "response",
-    "status": 202
+    "status": 200,
+    "schema": "PresenceResponse"
   },
   {
-    "file": "terms-consent-required.json",
-    "schema": "Problem"
+    "file": "listTelescopes.response.json",
+    "operationId": "listTelescopes",
+    "direction": "response",
+    "status": 200,
+    "schema": "TelescopeList"
   },
   {
-    "file": "rate-limited.json",
-    "schema": "Problem"
+    "file": "errors/unknown-token.response.json",
+    "operationId": "tonight",
+    "direction": "response",
+    "status": 401,
+    "schema": "ErrorBody"
   },
   {
-    "file": "invalid-request.json",
-    "schema": "Problem"
+    "file": "errors/cannot-join.response.json",
+    "operationId": "joinProject",
+    "direction": "response",
+    "status": 409,
+    "schema": "ErrorBody"
   },
   {
-    "file": "id-conflict.json",
-    "schema": "Problem"
+    "file": "extra/pairTelescope.request.json",
+    "operationId": "pairTelescope",
+    "direction": "request",
+    "schema": "PairRequest"
   },
   {
-    "file": "part-conflict.json",
-    "schema": "Problem"
+    "file": "extra/pairTelescope.response.json",
+    "operationId": "pairTelescope",
+    "direction": "response",
+    "status": 200,
+    "schema": "TelescopeCreated"
   },
   {
-    "file": "mosaic-equipment.json",
-    "schema": "Equipment"
-  },
-  {
-    "file": "color-rig-equipment.json",
-    "schema": "EquipmentInput"
-  },
-  {
-    "file": "recalibrated-submission.json",
-    "schema": "SubmissionCreate"
-  },
-  {
-    "file": "external-delivery-requirements.json",
-    "schema": "RequirementSet"
-  },
-  {
-    "file": "external-submission.json",
-    "schema": "SubmissionCreate"
-  },
-  {
-    "file": "stacked-masters-requirements.json",
-    "schema": "RequirementSet"
-  },
-  {
-    "file": "stacked-master-submission.json",
-    "schema": "SubmissionCreate"
-  },
-  {
-    "file": "assignment.json",
-    "schema": "Assignment"
-  },
-  {
-    "file": "mosaic-assignment.json",
-    "schema": "Assignment"
-  },
-  {
-    "file": "checkin-wait.json",
-    "schema": "CheckinResult"
-  },
-  {
-    "file": "mosaic-project.json",
-    "schema": "Project"
+    "file": "extra/authLogout.response.json",
+    "operationId": "authLogout",
+    "direction": "response",
+    "status": 200,
+    "schema": "SignedOut"
   }
 ]

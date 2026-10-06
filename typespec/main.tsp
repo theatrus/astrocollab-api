@@ -2,30 +2,25 @@ import "@typespec/http";
 import "@typespec/openapi";
 import "@typespec/openapi3";
 import "./common.tsp";
-import "./problem.tsp";
-import "./capabilities.tsp";
-import "./pairing.tsp";
-import "./projects.tsp";
-import "./rigs.tsp";
-import "./planning.tsp";
-import "./submissions.tsp";
+import "./models.tsp";
+import "./routes.tsp";
 
 using Http;
 using OpenAPI;
 
 /**
- * Draft API for collaborative astrophotography. See spec/protocol.md for resource states,
- * authorization and protocol requirements.
+ * Draft API for collaborative astrophotography. A telescope's software signs in, describes
+ * the rig, asks what to shoot tonight and reports what it captured. This version adopts the
+ * protocol Starfront already speaks. See spec/protocol.md for the rules behind each route.
  */
 @service(#{ title: "AstroCollab API" })
-@info(#{ version: "0.1.0-draft.1", license: #{ name: "MIT", identifier: "MIT" } })
-@server("https://collab.example/v1", "Reserved example; discover the real API root from the chosen service.")
+@info(#{ version: "0.2.0-draft.1", license: #{ name: "MIT", identifier: "MIT" } })
+@server("https://collab.example", "Reserved example; use the address of the server you join.")
 @useAuth(bearerAuth)
 namespace AstroCollab;
 
 /**
- * Send `Authorization: Bearer <api key>`. Each client installation gets its key by pairing.
- * A key acts for its account, optionally limited to some projects. See
- * spec/authentication.md.
+ * Send `Authorization: Bearer <token>`. Telescope routes take a telescope's agent token;
+ * account routes take a person's token from sign-in. The two are never interchangeable.
  */
 model bearerAuth is BearerAuth;
